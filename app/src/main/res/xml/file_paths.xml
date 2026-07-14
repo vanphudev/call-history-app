@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Đường dẫn FileProvider dùng để CHIA SẺ ảnh mã QR: chỉ mở đúng thư mục con "qr_share" trong cache
+  của app (getCacheDir()/qr_share). App nhận chỉ đọc được file được cấp URI, không thấy phần còn lại.
+-->
+<paths>
+    <cache-path name="qr_share" path="qr_share/" />
+</paths>

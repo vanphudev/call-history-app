@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <style name="Theme.CallHS" parent="android:Theme.Material.Light.NoActionBar">
+        <!-- Nền cửa sổ TRẮNG: tránh nháy màu xám mặc định trước khi Compose vẽ. -->
+        <item name="android:windowBackground">@android:color/white</item>
+        <!-- Thanh hệ thống trong suốt (hành vi cơ sở cho API 29-34; API 35+ vốn đã ép trong suốt). -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <!-- Icon thanh trạng thái/điều hướng TỐI (nền sáng). -->
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+</resources>

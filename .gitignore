@@ -1,0 +1,59 @@
+# ─────────────────────────────────────────────────────────────
+#  callHS — .gitignore
+# ─────────────────────────────────────────────────────────────
+
+# Built application files
+*.apk
+*.aab
+*.aar
+*.ap_
+*.dex
+*.class
+
+# Generated files
+bin/
+gen/
+out/
+release/
+
+# Gradle
+.gradle/
+build/
+/captures/
+
+# Local configuration (SDK path, machine-specific)
+local.properties
+
+# ── Signing — KHÔNG BAO GIỜ commit khoá ký & mật khẩu ──────────
+*.jks
+*.jks.bak
+*.keystore
+keystore.properties
+# Google Services (nếu sau này thêm)
+google-services.json
+
+# Native build
+.externalNativeBuild/
+.cxx/
+
+# Kotlin
+.kotlin/
+
+# IntelliJ / Android Studio (local IDE state)
+*.iml
+.idea/
+
+# Logs / profiling
+*.log
+*.hprof
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Claude Code local state
+.claude/
+
+# Internal research / data-pipeline scaffolding — KHÔNG public
+# (không thuộc app; chứa đường dẫn máy cục bộ + dữ liệu thu thập tạm)
+/research/

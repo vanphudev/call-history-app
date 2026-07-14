@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!--
+      Biến thể TỐI của [Theme.CallHS] — CHỈ dùng ở tầng cửa sổ lúc KHỞI ĐỘNG (trước khi Compose vẽ), để khi
+      MÁY đang ở chế độ tối thì KHÔNG nháy nền trắng. Màu app thật do Compose điều khiển ([ThemeSettings]).
+      Lưu ý: nếu người dùng ép DARK trong khi máy đang SÁNG (hoặc ngược lại), khung này bám theo MÁY nên có
+      thể lệch ~1 khung hình lúc mở app; Box nền ở setContent phủ ngay sau đó nên gần như không thấy.
+    -->
+    <style name="Theme.CallHS" parent="android:Theme.Material.NoActionBar">
+        <!-- Nền cửa sổ TỐI (khớp appBackground bản tối #0E1113) → tránh nháy trắng trước khi Compose vẽ. -->
+        <item name="android:windowBackground">@color/launch_bg_dark</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <!-- Icon thanh trạng thái/điều hướng SÁNG (nền tối). -->
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+</resources>

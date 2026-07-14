@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Nền cửa sổ lúc KHỞI ĐỘNG cho chế độ tối (khớp appBackground bản tối trong Palette.kt: #0E1113).
+         Chỉ dùng ở res/values-night/themes.xml để tránh nháy trắng trước khi Compose vẽ. -->
+    <color name="launch_bg_dark">#FF0E1113</color>
+</resources>
