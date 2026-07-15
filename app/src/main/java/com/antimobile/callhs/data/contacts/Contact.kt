@@ -1,6 +1,8 @@
 package com.antimobile.callhs.data.contacts
 
+import com.antimobile.callhs.data.agency.normalizeForSearch
 import com.antimobile.callhs.i18n.appStrings
+import com.antimobile.callhs.util.PhoneKey
 
 /** LOẠI số danh bạ (chuẩn hoá từ ContactsContract) — TÊN hiển thị đổi theo ngôn ngữ, resolve ở tầng UI. */
 enum class ContactPhoneType { MOBILE, HOME, WORK, MAIN, WORK_MOBILE, FAX, PAGER, CUSTOM, OTHER }
@@ -42,13 +44,15 @@ object ContactSearch {
     fun matches(contact: Contact, query: String): Boolean {
         val q = query.trim()
         if (q.isEmpty()) return true
-        if (contact.displayName.contains(q, ignoreCase = true)) return true
-        if (contact.organization?.contains(q, ignoreCase = true) == true) return true
-        if (contact.emails.any { it.contains(q, ignoreCase = true) }) return true
-        val qDigits = q.filter { it.isDigit() }
-        if (qDigits.isNotEmpty() &&
-            contact.phones.any { it.number.filter { ch -> ch.isDigit() }.contains(qDigits) }
-        ) return true
+        // TÊN / TỔ CHỨC / EMAIL: bỏ dấu 2 phía → gõ "nguyen van duc" tìm được "Nguyễn Văn Đức".
+        val nq = normalizeForSearch(q)
+        if (nq.isNotEmpty()) {
+            if (normalizeForSearch(contact.displayName).contains(nq)) return true
+            if (contact.organization?.let { normalizeForSearch(it).contains(nq) } == true) return true
+            if (contact.emails.any { normalizeForSearch(it).contains(nq) }) return true
+        }
+        // SỐ: chỉ khớp khi truy vấn TRÔNG GIỐNG số (tránh "Lan 84" kéo cả danh bạ) và cho 0 ↔ +84 xem như nhau.
+        if (PhoneKey.isPhoneLikeQuery(q) && contact.phones.any { PhoneKey.matchesQuery(it.number, q) }) return true
         return false
     }
 

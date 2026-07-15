@@ -22,10 +22,23 @@ data class ContactListing(
 
 object ContactIndex {
 
-    /** Bỏ dấu tiếng Việt (NFD + xoá dấu tổ hợp) và quy Đ→D để lấy chữ cái A–Z. */
+    /**
+     * Bỏ dấu tiếng Việt (NFD + xoá dấu tổ hợp) và quy Đ→D để lấy chữ cái A–Z. Lọc dấu bằng
+     * [Character.getType] thay vì regex `\p{Mn}` — nhanh hơn (không biên dịch regex mỗi lần gọi, tránh gọi hàng
+     * chục nghìn lần lúc sắp xếp danh bạ lớn) và an toàn hơn trên vài máy Android nhạy cảm cú pháp `{}` trong regex.
+     */
     fun fold(text: String): String {
-        val stripped = Normalizer.normalize(text, Normalizer.Form.NFD).replace("\\p{Mn}+".toRegex(), "")
-        return stripped.replace('Đ', 'D').replace('đ', 'd')
+        val nfd = Normalizer.normalize(text, Normalizer.Form.NFD)
+        val sb = StringBuilder(nfd.length)
+        for (c in nfd) {
+            when {
+                Character.getType(c) == Character.NON_SPACING_MARK.toInt() -> {} // bỏ dấu tổ hợp
+                c == 'Đ' -> sb.append('D')
+                c == 'đ' -> sb.append('d')
+                else -> sb.append(c)
+            }
+        }
+        return sb.toString()
     }
 
     /** Chữ cái mục lục của [name]: A–Z (đã bỏ dấu); ký tự đầu không phải chữ cái → "#". */
@@ -46,15 +59,22 @@ object ContactIndex {
      */
     fun build(contacts: List<Contact>): ContactListing {
         if (contacts.isEmpty()) return ContactListing(emptyList(), emptyList(), emptyMap())
-        val sorted = contacts.sortedWith(
-            compareBy<Contact> { if (sectionLetter(it.displayNameOrNumber) == "#") 1 else 0 }
-                .thenBy { sortKey(it.displayNameOrNumber) }
-                .thenBy { it.displayNameOrNumber.lowercase() }
+        // Tính khoá sắp xếp MỘT LẦN cho mỗi liên hệ (letter/sortKey/nameLower) rồi mới sort — tránh gọi
+        // sectionLetter/sortKey (mỗi cái NFD-normalize) HAI LẦN cho MỖI so sánh (O(n log n) lần) trên UI thread.
+        data class Keyed(val contact: Contact, val letter: String, val sortKey: String, val nameLower: String)
+        val keyed = contacts.map { c ->
+            val name = c.displayNameOrNumber
+            Keyed(c, sectionLetter(name), sortKey(name), name.lowercase())
+        }
+        val sorted = keyed.sortedWith(
+            compareBy<Keyed> { if (it.letter == "#") 1 else 0 }
+                .thenBy { it.sortKey }
+                .thenBy { it.nameLower }
         )
-        // Gom theo chữ cái bằng getOrPut → mỗi chữ cái CHỈ MỘT nhóm (không Header/khoá LazyColumn trùng →
+        // Gom theo chữ cái bằng getOrPut → mỗi chữ cái CHỉ MỘT nhóm (không Header/khoá LazyColumn trùng →
         // không crash), thứ tự chữ cái = thứ tự xuất hiện trong danh sách ĐÃ sắp xếp (A→Z, "#" cuối).
         val bySection = LinkedHashMap<String, MutableList<Contact>>()
-        for (c in sorted) bySection.getOrPut(sectionLetter(c.displayNameOrNumber)) { ArrayList() }.add(c)
+        for (k in sorted) bySection.getOrPut(k.letter) { ArrayList() }.add(k.contact)
 
         val rows = ArrayList<ContactRowItem>(sorted.size + bySection.size)
         val letters = ArrayList<String>(bySection.size)
