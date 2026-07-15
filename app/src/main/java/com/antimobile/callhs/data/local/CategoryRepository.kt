@@ -58,6 +58,20 @@ class CategoryRepository(context: Context) {
 
     // --- Writes ---
 
+    /**
+     * Chuẩn hoá lại [CategoryMemberEntity.phoneKey] theo thuật toán [PhoneKey] hiện hành từ [rawNumber] đã lưu.
+     * Cần vì [PhoneKey.of] đổi cách tính cho số CỐ ĐỊNH (NSN thay vì "9 số cuối"): thành viên là số cố định lưu
+     * theo bản cũ sẽ không còn khớp badge/bộ lọc nếu không tính lại. Idempotent (chạy lại → không đổi gì). Với DI
+     * ĐỘNG khoá không đổi nên đa số dòng bỏ qua. Trùng khoá trong cùng nhóm sau chuẩn hoá → bỏ bản dư (unique index).
+     */
+    suspend fun renormalizeMemberKeys() {
+        for (m in dao.getAllMembers()) {
+            val newKey = PhoneKey.of(m.rawNumber)
+            if (newKey.isEmpty() || newKey == m.phoneKey) continue
+            if (runCatching { dao.updateMemberKey(m.id, newKey) }.isFailure) dao.deleteMemberById(m.id)
+        }
+    }
+
     /** Seed 2 nhóm mặc định nếu chưa có. Idempotent — gọi 1 lần lúc app khởi động. */
     suspend fun ensureSeeded() {
         if (dao.builtInCount(BUILTIN_WORK) == 0) {
@@ -76,6 +90,8 @@ class CategoryRepository(context: Context) {
                 )
             )
         }
+        // Chuẩn hoá lại khoá thành viên theo thuật toán PhoneKey mới (chủ yếu cho số cố định) — idempotent.
+        renormalizeMemberKeys()
     }
 
     /** @return id nhóm mới, hoặc null nếu đã đạt tối đa [MAX_CATEGORIES]. */
@@ -102,6 +118,10 @@ class CategoryRepository(context: Context) {
     suspend fun deleteCategory(id: Long): Boolean = dao.deleteUserCategory(id) > 0
 
     suspend fun addMember(categoryId: Long, rawNumber: String): AddMemberResult {
+        // Loại số ẩn danh/đặc biệt của nhật ký ("-1"/"-2"/"-3"): filter chữ số biến "-1"→"1" nên KHÔNG rỗng,
+        // nếu để lọt sẽ badge/filter mọi cuộc private (và cả số thật có NSN "1"). Chặn giống lookupContact.
+        val clean = rawNumber.trim()
+        if (clean.isEmpty() || clean.startsWith("-")) return AddMemberResult.INVALID
         val key = PhoneKey.of(rawNumber)
         if (key.isEmpty()) return AddMemberResult.INVALID
         if (dao.memberExists(categoryId, key) > 0) return AddMemberResult.ALREADY
@@ -115,7 +135,9 @@ class CategoryRepository(context: Context) {
         return AddMemberResult.ADDED
     }
 
-    suspend fun removeMember(categoryId: Long, phoneKey: String) = dao.deleteMember(categoryId, phoneKey)
+    /** Gỡ số khỏi nhóm. Nhận số ở BẤT KỲ dạng nào ([number] thô hoặc khoá) — repo tự chuẩn hoá về khoá, nên
+     *  caller không thể vô tình truyền số chưa chuẩn hoá làm xoá hụt (PhoneKey.of của một khoá = chính nó). */
+    suspend fun removeMember(categoryId: Long, number: String) = dao.deleteMember(categoryId, PhoneKey.of(number))
 
     private fun CategoryEntity.toModel(memberCount: Int) =
         Category(id, name, description, iconKey, colorArgb, builtInKey, memberCount)

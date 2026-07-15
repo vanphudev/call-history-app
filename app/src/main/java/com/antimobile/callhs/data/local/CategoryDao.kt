@@ -44,6 +44,15 @@ interface CategoryDao {
     @Query("SELECT * FROM category_members")
     fun observeAllMembers(): Flow<List<CategoryMemberEntity>>
 
+    @Query("SELECT * FROM category_members")
+    suspend fun getAllMembers(): List<CategoryMemberEntity>
+
+    @Query("UPDATE category_members SET phoneKey = :phoneKey WHERE id = :id")
+    suspend fun updateMemberKey(id: Long, phoneKey: String)
+
+    @Query("DELETE FROM category_members WHERE id = :id")
+    suspend fun deleteMemberById(id: Long)
+
     @Query("SELECT COUNT(*) FROM category_members WHERE categoryId = :categoryId")
     suspend fun memberCount(categoryId: Long): Int
 
