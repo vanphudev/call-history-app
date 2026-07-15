@@ -137,6 +137,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.antimobile.callhs.data.local.Category
 import com.antimobile.callhs.data.local.CategoryCatalog
+import com.antimobile.callhs.data.agency.normalizeForSearch
 import com.antimobile.callhs.data.model.CallEntry
 import com.antimobile.callhs.ui.category.CategoryGlyph
 import com.antimobile.callhs.ui.category.categoryGlyph
@@ -390,9 +391,9 @@ fun CallListScreen(
     var contentCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     // Chỉ hiện nút khi đã cuộn qua vài dòng đầu (tránh nhấp nháy khi ở gần đỉnh).
     val showScrollTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 4 } }
-    // Đóng màn tìm kiếm (dùng cho CẢ nút X lẫn nút BACK): có từ khoá thì lưu lịch sử rồi reset.
+    // Đóng màn tìm kiếm (dùng cho CẢ nút X lẫn nút BACK): CHỈ reset, KHÔNG lưu lịch sử — tránh nhét truy vấn
+    // gõ dở mà người dùng CHỦ ĐỘNG huỷ vào "tìm gần đây". Lịch sử chỉ lưu khi xác nhận thật (phím ✓ / chạm kết quả).
     val closeSearch: () -> Unit = {
-        if (query.isNotBlank()) commitSearch(query)
         searchActive = false; searchFocused = false; query = ""; focusManager.clearFocus()
     }
     // Nút xác nhận trên bàn phím → NHẢ FOCUS HẲN (như chạm ngoài, con trỏ tắt) + lưu lịch sử nếu có từ khoá.
@@ -742,12 +743,22 @@ private fun buildRows(
     // Ngày cụ thể đang lọc (chỉ dùng khi DateFilter.CUSTOM); null nếu chưa chọn → không áp lọc ngày.
     val customDay = if (customEpochDay > 0L) LocalDate.ofEpochDay(customEpochDay) else null
     val q = query.trim()
+    // Tính MỘT LẦN cho cả truy vấn (không lặp mỗi dòng): chuỗi tìm đã bỏ dấu + truy vấn có "giống số" không.
+    val nq = normalizeForSearch(q)
+    val phoneLike = PhoneKey.isPhoneLikeQuery(q)
     val filtered = entries.filter { e ->
+        // Phạm vi SIM + NHÓM luôn áp dụng (kể cả khi tìm kiếm) → tìm ĐÚNG trong những gì đang xem, và đóng tìm
+        // kiếm không bị "nhảy" danh sách. null = không thu hẹp.
+        val matchScope = (simFilter == null || e.simLabel == simFilter) &&
+            (categoryNumbers == null || PhoneKey.of(e.number) in categoryNumbers)
         if (q.isNotBlank()) {
-            // ĐANG TÌM KIẾM = tìm TOÀN BỘ nhật ký theo tên/số, **KHÔNG áp bộ lọc loại/ngày** đang chọn.
-            e.nameOrNumber.contains(q, ignoreCase = true) ||
-                (e.cachedName?.contains(q, ignoreCase = true) == true) ||
-                e.number.replace(" ", "").contains(q.replace(" ", ""))
+            // ĐANG TÌM KIẾM = tìm theo tên/số trong PHẠM VI SIM/nhóm hiện tại, **KHÔNG áp bộ lọc loại/ngày**.
+            // Tên: bỏ dấu 2 phía; Số: khớp 0 ↔ +84 (chỉ khi truy vấn giống số → không kéo nhầm khi gõ chữ).
+            matchScope && (
+                (nq.isNotEmpty() && (normalizeForSearch(e.nameOrNumber).contains(nq) ||
+                    (e.cachedName != null && normalizeForSearch(e.cachedName).contains(nq)))) ||
+                    (phoneLike && PhoneKey.matchesQuery(e.number, q))
+                )
         } else {
             // KHÔNG tìm kiếm → áp bộ lọc LOẠI + NGÀY như thường.
             val matchType = when (typeFilter) {
@@ -766,11 +777,8 @@ private fun buildRows(
                 // Lọc đúng MỘT NGÀY cụ thể; chưa chọn ngày (customDay null) → không thu hẹp.
                 DateFilter.CUSTOM -> customDay == null || date.isEqual(customDay)
             }
-            // Lọc theo SIM: null = mọi SIM; ngược lại chỉ giữ cuộc gọi có đúng nhãn SIM đang chọn.
-            val matchSim = simFilter == null || e.simLabel == simFilter
-            // Lọc theo NHÓM: null = không lọc; ngược lại chỉ giữ số nằm trong nhóm (so khớp theo 9 số cuối).
-            val matchCategory = categoryNumbers == null || PhoneKey.of(e.number) in categoryNumbers
-            matchType && matchDate && matchSim && matchCategory
+            // SIM + nhóm: dùng chung matchScope (đã tính ở trên) để không lặp logic.
+            matchType && matchDate && matchScope
         }
     }
 
@@ -780,8 +788,10 @@ private fun buildRows(
         ViewMode.BY_TIME -> filtered.map { it to 0 }
         // Theo SỐ: gộp mỗi số 1 dòng (đại diện = cuộc mới nhất đã lọc), kèm số cuộc nhỡ liên tiếp cuối cùng.
         ViewMode.BY_PHONE -> {
+            // Gộp theo KHOÁ CHUẨN (không phải chuỗi số thô) → cùng người dù nhật ký lưu lẫn "+84…"/"0…" chỉ
+            // còn MỘT dòng; đại diện = cuộc mới nhất (chuỗi số thật để dial/hiển thị đúng).
             val byNumber = LinkedHashMap<String, MutableList<CallEntry>>()
-            for (e in filtered) byNumber.getOrPut(e.number) { ArrayList() }.add(e)
+            for (e in filtered) byNumber.getOrPut(PhoneKey.of(e.number).ifEmpty { e.number }) { ArrayList() }.add(e)
             byNumber.values.map { calls -> calls.first() to leadingMissedRun(calls) }
         }
     }

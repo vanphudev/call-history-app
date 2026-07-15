@@ -184,15 +184,17 @@ object RepeatStats {
         val startMillis = windowStartDate.atStartOfDay(zone).toInstant().toEpochMilli()
         val endExclusive = today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
 
+        // Gộp theo KHOÁ CHUẨN [PhoneKey] → một số bị gọi lại dù nhật ký lưu lẫn "+84…"/"0…" vẫn tính là MỘT số
+        // (đúng bản chất "gọi lại/trùng số"); đại diện lấy số thật của cuộc mới nhất trong buildNumber.
         val byNumber = LinkedHashMap<String, MutableList<CallEntry>>()
         for (e in entries) {
             if (e.dateMillis < startMillis || e.dateMillis >= endExclusive) continue
             if (CallStats.bucketOf(e.type) == CallBucket.OTHER) continue
-            byNumber.getOrPut(e.number) { ArrayList() }.add(e)
+            byNumber.getOrPut(PhoneKey.of(e.number).ifEmpty { e.number }) { ArrayList() }.add(e)
         }
 
         val numbers = byNumber
-            .mapNotNull { (number, calls) -> buildNumber(number, calls, windowStartDate, zone) }
+            .mapNotNull { (_, calls) -> buildNumber(calls, windowStartDate, zone) }
             .sortedWith(
                 compareByDescending<RepeatNumber> { it.totalCalls }
                     .thenByDescending { it.distinctDays }
@@ -204,7 +206,6 @@ object RepeatStats {
     }
 
     private fun buildNumber(
-        number: String,
         calls: List<CallEntry>,
         windowStartDate: LocalDate,
         zone: ZoneId
@@ -255,10 +256,10 @@ object RepeatStats {
         val distinctDays = days.size
         val span = ChronoUnit.DAYS.between(days.first().date, days.last().date).toInt()
         val avgGap = if (distinctDays >= 2) span.toDouble() / (distinctDays - 1) else null
-        val rep = calls.first() // entries mới→cũ ⇒ đại diện = cuộc mới nhất (tên/ảnh mới nhất)
+        val rep = calls.first() // entries mới→cũ ⇒ đại diện = cuộc mới nhất (tên/ảnh/số mới nhất)
 
         return RepeatNumber(
-            number = number,
+            number = rep.number,
             cachedName = rep.cachedName?.takeIf { it.isNotBlank() },
             photoUri = rep.photoUri,
             totalCalls = total,

@@ -134,9 +134,11 @@ object CallStats {
      * sắp xếp theo TỔNG số cuộc giảm dần, đồng hạng thì số nhiều thời lượng hơn lên trước.
      */
     fun phoneStats(entries: List<CallEntry>): List<PhoneStat> {
+        // Gộp theo KHOÁ CHUẨN [PhoneKey] → cùng người dù lưu lẫn "+84…"/"0…" chỉ đếm MỘT lần (đúng distinctNumbers,
+        // đúng "quán quân"). Đại diện = cuộc mới nhất (entries mới→cũ) nên number/tên/ảnh là bản mới nhất.
         val byNumber = LinkedHashMap<String, MutableList<CallEntry>>()
-        for (e in entries) byNumber.getOrPut(e.number) { ArrayList() }.add(e)
-        return byNumber.map { (number, calls) ->
+        for (e in entries) byNumber.getOrPut(PhoneKey.of(e.number).ifEmpty { e.number }) { ArrayList() }.add(e)
+        return byNumber.map { (_, calls) ->
             var out = 0; var inc = 0; var miss = 0
             var conn = 0; var dur = 0L
             for (c in calls) {
@@ -151,9 +153,9 @@ object CallStats {
                     dur += c.durationSeconds
                 }
             }
-            val rep = calls.first() // entries mới→cũ ⇒ đại diện = cuộc mới nhất (tên/ảnh mới nhất)
+            val rep = calls.first() // entries mới→cũ ⇒ đại diện = cuộc mới nhất (tên/ảnh/số mới nhất)
             PhoneStat(
-                number = number,
+                number = rep.number,
                 cachedName = rep.cachedName?.takeIf { it.isNotBlank() },
                 photoUri = rep.photoUri,
                 outgoing = out, incoming = inc, missed = miss,
