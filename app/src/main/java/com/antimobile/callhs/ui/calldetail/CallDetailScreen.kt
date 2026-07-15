@@ -58,6 +58,7 @@ import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -223,9 +224,13 @@ fun CallDetailScreen(
                 vm.loading && detail == null ->
                     Box(Modifier.fillMaxSize().padding(top = TOP_BAR_HEIGHT)) { LoadingState(text = appStrings().callDetail.loading) }
 
-                detail == null || detail.entries.isEmpty() ->
+                // Số KHÔNG hợp lệ / không có gì để hiện (số rỗng) → trạng thái trống trọn màn.
+                detail == null ->
                     Box(Modifier.fillMaxSize().padding(top = TOP_BAR_HEIGHT)) { EmptyState(appStrings().callDetail.emptyNoCalls) }
 
+                // Có DANH TÍNH số (detail != null) → LUÔN hiện đầu trang + thẻ hành động (gọi/nhắn/chia sẻ/lưu),
+                // kể cả khi 0 cuộc: số mở từ danh bạ hoặc đang lọc theo phạm vi SIM vẫn thao tác được. Phần LỊCH SỬ
+                // rỗng thì thay bằng thông báo (nêu rõ đang lọc SIM để không tưởng là "mất" cuộc gọi).
                 else -> LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
@@ -235,18 +240,28 @@ fun CallDetailScreen(
                     item { Spacer(Modifier.height(16.dp)) }
                     item { ActionCard(detail, context, onTemplates = { showTemplateSheet = true }) }
                     item { Spacer(Modifier.height(22.dp)) }
-                    item {
-                        HistorySection(
-                            entries = detail.entries,
-                            expanded = historyExpanded,
-                            onToggle = { id ->
-                                historyExpanded = if (id in historyExpanded) historyExpanded - id else historyExpanded + id
-                            },
-                            onSeeAll = onSeeAll
-                        )
+                    if (detail.entries.isEmpty()) {
+                        item {
+                            val scopeLabel = SimScope.effectiveLabel
+                            EmptyState(
+                                if (scopeLabel != null) appStrings().callDetail.emptyNoCallsInScope(scopeLabel)
+                                else appStrings().callDetail.emptyNoCalls
+                            )
+                        }
+                    } else {
+                        item {
+                            HistorySection(
+                                entries = detail.entries,
+                                expanded = historyExpanded,
+                                onToggle = { id ->
+                                    historyExpanded = if (id in historyExpanded) historyExpanded - id else historyExpanded + id
+                                },
+                                onSeeAll = onSeeAll
+                            )
+                        }
+                        item { Spacer(Modifier.height(20.dp)) }
+                        item { FeatureCard(onShare = { showShareSheet = true }) }
                     }
-                    item { Spacer(Modifier.height(20.dp)) }
-                    item { FeatureCard(onShare = { showShareSheet = true }) }
                 }
             }
 
@@ -254,7 +269,7 @@ fun CallDetailScreen(
                 collapsed = collapsed,
                 detail = detail,
                 onBack = onBack,
-                onCostStats = { if (detail != null) onCostStats() },
+                onCostStats = { if (hasDetail) onCostStats() },
                 onCopy = { detail?.let { CallActions.copy(context, it.number) } }
             )
 
@@ -337,7 +352,7 @@ fun CallDetailScreen(
                                 AddMemberResult.ADDED -> CallActions.toast(context, appStrings().category.addedTo(label))
                                 AddMemberResult.FULL -> CallActions.toast(context, appStrings().category.maxMembers)
                                 AddMemberResult.ALREADY -> CallActions.toast(context, appStrings().category.alreadyAdded)
-                                AddMemberResult.INVALID -> {}
+                                AddMemberResult.INVALID -> CallActions.toast(context, appStrings().category.invalidNumber)
                             }
                         } else {
                             categoryRepo.removeMember(cat.id, PhoneKey.of(number))
@@ -696,7 +711,9 @@ private fun HistorySection(
 ) {
     val globalSim = SimScope.effectiveLabel
     val simLabels = remember(entries) { entries.mapNotNull { it.simLabel }.distinct().sorted() }
-    var localSim by remember { mutableStateOf<String?>(null) }
+    // rememberSaveable (LazyColumn giữ qua lúc item cuộn khỏi màn rồi quay lại) + KHOÁ theo số đang xem (id cuộc
+    // mới nhất) → lọc SIM cục bộ KHÔNG bị reset khi cuộn xuống công cụ rồi cuộn lên; nhưng reset khi đổi sang số khác.
+    var localSim by rememberSaveable(entries.firstOrNull()?.id ?: 0L) { mutableStateOf<String?>(null) }
     // Khoá phạm vi toàn app → bỏ lọc cục bộ (dữ liệu đã lọc sẵn tại gốc). Ngược lại lọc theo lựa chọn cục bộ
     // (chỉ giữ khi SIM còn trong danh sách). null = tất cả.
     val effectiveLocal = if (globalSim != null) null else localSim?.takeIf { it in simLabels }

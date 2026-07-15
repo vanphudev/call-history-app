@@ -40,7 +40,20 @@ fun AvatarCategoryBadges(
     max: Int = 3,
     badgeSize: Dp = 15.dp,
 ) {
-    val badges = CategoryCatalog.badgesFor(number)
+    AvatarCategoryBadges(CategoryCatalog.badgesFor(number), modifier, max, badgeSize)
+}
+
+/**
+ * Biến thể nhận SẴN danh sách badge (đã gộp/khử trùng) — dùng khi một thẻ đại diện cho NHIỀU số (vd thẻ
+ * liên hệ gộp badge của mọi số) để badge trên avatar khớp với sheet chi tiết.
+ */
+@Composable
+fun AvatarCategoryBadges(
+    badges: List<CategoryBadge>,
+    modifier: Modifier = Modifier,
+    max: Int = 3,
+    badgeSize: Dp = 15.dp,
+) {
     if (badges.isEmpty()) return
     val shown = badges.take(max)
     val extra = badges.size - shown.size

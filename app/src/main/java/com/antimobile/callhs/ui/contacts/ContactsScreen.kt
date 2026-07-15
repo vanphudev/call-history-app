@@ -88,6 +88,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -191,8 +192,8 @@ private sealed interface TemplateEditorTarget {
     data class Edit(val template: MessageTemplate) : TemplateEditorTarget
 }
 
-/** Liên hệ đang mở context-menu (nhấn giữ) + KHUNG thẻ (toạ độ cửa sổ, px) để dựng lớp phủ đúng vị trí. */
-private data class ContactContextTarget(val contact: Contact, val bounds: Rect)
+/** Liên hệ (theo ID, giải ra bản MỚI NHẤT lúc hiển thị) đang mở context-menu + KHUNG thẻ (toạ độ cửa sổ, px). */
+private data class ContactContextTarget(val contactId: Long, val bounds: Rect)
 
 /**
  * Màn DANH BẠ: tìm kiếm toàn văn (tên/số/email) + DANH SÁCH hàng ngang, mỗi liên hệ là MỘT thẻ nền XANH LÁ
@@ -211,7 +212,10 @@ fun ContactsScreen(
 
     val s = appStrings()
     var query by remember { mutableStateOf("") }
-    var selected by remember { mutableStateOf<Contact?>(null) }
+    // Sheet chi tiết & chia sẻ giữ ID liên hệ (không giữ bản sao Contact) → sau khi danh bạ nạp lại (sửa ở app
+    // Danh bạ / observer), sheet đang mở tự lấy dữ liệu MỚI NHẤT từ vm.contacts; liên hệ bị xoá → sheet tự đóng.
+    var selectedId by remember { mutableStateOf<Long?>(null) }
+    var shareContactId by remember { mutableStateOf<Long?>(null) }
     // Số đang mở sheet "thêm vào nhóm phân loại" (chồng lên sheet thông tin liên hệ).
     var addCategoryNumber by remember { mutableStateOf<String?>(null) }
 
@@ -225,8 +229,6 @@ fun ContactsScreen(
     var qrAction by remember { mutableStateOf<QrContent?>(null) }
     // Màn soạn mẫu (tạo/sửa): != null → phủ toàn màn; xong → mở lại danh sách mẫu.
     var editorTarget by remember { mutableStateOf<TemplateEditorTarget?>(null) }
-    // Liên hệ đang mở sheet "Chia sẻ liên hệ".
-    var shareContact by remember { mutableStateOf<Contact?>(null) }
 
     // ---- Context-menu (NHẤN GIỮ item) hiện 2 nút Sửa / Xoá — dựng ở GỐC (ngoài inset) để nền tối phủ trọn màn.
     val density = LocalDensity.current
@@ -237,6 +239,9 @@ fun ContactsScreen(
     val filtered = remember(vm.contacts, query) { ContactSearch.filter(vm.contacts, query) }
     // Danh bạ ĐÃ nhóm A→Z (chỉ dùng khi KHÔNG tìm kiếm) + trạng thái cuộn cho thanh mục lục.
     val listing = remember(vm.contacts) { ContactIndex.build(vm.contacts) }
+    // Giải ID → Contact MỚI NHẤT (null nếu liên hệ đã bị xoá → sheet tương ứng tự đóng).
+    val selected = selectedId?.let { id -> vm.contacts.firstOrNull { it.id == id } }
+    val shareContact = shareContactId?.let { id -> vm.contacts.firstOrNull { it.id == id } }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
@@ -247,7 +252,13 @@ fun ContactsScreen(
     val prefs = remember { context.getSharedPreferences("contacts_prefs", Context.MODE_PRIVATE) }
     val focusManager = LocalFocusManager.current
     var searchFocused by remember { mutableStateOf(false) }
-    var searchHistory by remember { mutableStateOf(prefs.loadSearchHistory()) }
+    // Nạp lịch sử tìm kiếm (đọc/parse JSON từ đĩa) ở NỀN, không chặn luồng chính lúc compose; lịch sử chỉ hiện
+    // khi mở ô tìm nên trống một nhịp đầu là chấp nhận được.
+    var searchHistory by remember { mutableStateOf<List<SearchEntry>>(emptyList()) }
+    LaunchedEffect(Unit) {
+        val loaded = withContext(Dispatchers.IO) { prefs.loadSearchHistory() }
+        if (searchHistory.isEmpty()) searchHistory = loaded
+    }
     val commitSearch: (String) -> Unit = { q ->
         val updated = pushSearch(searchHistory, q, System.currentTimeMillis())
         searchHistory = updated
@@ -350,6 +361,9 @@ fun ContactsScreen(
 
                 vm.loading && !vm.loaded -> LoadingState(text = s.contacts.loading)
 
+                // Đọc danh bạ LỖI (khác "danh bạ trống") → báo lỗi để người dùng biết mà thử lại, không hiểu nhầm.
+                vm.contacts.isEmpty() && vm.loadFailed -> CenterMessage(s.contacts.loadError)
+
                 vm.contacts.isEmpty() -> CenterMessage(s.contacts.emptyNoContacts)
 
                 filtered.isEmpty() -> CenterMessage(s.contacts.emptyNoResults)
@@ -368,10 +382,10 @@ fun ContactsScreen(
                                     onOpen = {
                                         // Mở một kết quả tìm kiếm → lưu từ khoá vào lịch sử.
                                         if (query.isNotBlank()) commitSearch(query)
-                                        selected = contact
+                                        selectedId = contact.id
                                     },
-                                    onLongPress = { bounds -> if (contact.lookupKey != null) contextTarget = ContactContextTarget(contact, bounds) },
-                                    activeInMenu = contextTarget?.contact?.id == contact.id
+                                    onLongPress = { bounds -> contextTarget = ContactContextTarget(contact.id, bounds) },
+                                    activeInMenu = contextTarget?.contactId == contact.id
                                 )
                             }
                         }
@@ -389,9 +403,9 @@ fun ContactsScreen(
                                         is ContactRowItem.Header -> SectionLetterHeader(row.letter)
                                         is ContactRowItem.Item -> ContactRow(
                                             contact = row.contact,
-                                            onOpen = { selected = row.contact },
-                                            onLongPress = { bounds -> if (row.contact.lookupKey != null) contextTarget = ContactContextTarget(row.contact, bounds) },
-                                            activeInMenu = contextTarget?.contact?.id == row.contact.id
+                                            onOpen = { selectedId = row.contact.id },
+                                            onLongPress = { bounds -> contextTarget = ContactContextTarget(row.contact.id, bounds) },
+                                            activeInMenu = contextTarget?.contactId == row.contact.id
                                         )
                                     }
                                 }
@@ -467,29 +481,39 @@ fun ContactsScreen(
         // Lớp phủ CONTEXT-MENU (nhấn giữ liên hệ) — nằm trong Box GỐC nên nền tối phủ TRỌN màn (kể cả 2 thanh
         // hệ thống). 2 nút Sửa / Xoá đều chuyển sang Danh bạ mặc định để thao tác.
         contextTarget?.let { tgt ->
+            // Giải ID → Contact MỚI NHẤT; liên hệ vừa bị xoá (ở app Danh bạ) → đóng menu thay vì thao tác dữ liệu cũ.
+            val menuContact = vm.contacts.firstOrNull { it.id == tgt.contactId }
+            if (menuContact == null) {
+                LaunchedEffect(tgt.contactId) { contextTarget = null }
+                return@let
+            }
             val cd = appStrings().contacts
             ContextMenuOverlay(
                 bounds = tgt.bounds,
-                actions = listOf(
+                // 2 nút sao chép LUÔN có; Sửa/Xoá (cần lookupUri để mở Danh bạ mặc định) chỉ thêm khi có lookupKey —
+                // trước đây thiếu lookupKey thì nhấn giữ KHÔNG ra gì cả, kể cả 2 nút sao chép vẫn dùng được.
+                actions = buildList {
                     // Sao chép SỐ (số chính) — toast "Đã sao chép số".
-                    ContextAction(ActionGlyph.Vector(Icons.Rounded.ContentCopy, TextSecondary), appStrings().callDetail.copyNumber) {
-                        tgt.contact.primaryPhone?.let { CallActions.copy(context, it.number) }
-                    },
+                    add(ContextAction(ActionGlyph.Vector(Icons.Rounded.ContentCopy, TextSecondary), appStrings().callDetail.copyNumber) {
+                        menuContact.primaryPhone?.let { CallActions.copy(context, it.number) }
+                    })
                     // Sao chép CẢ thông tin (tên + mọi số + mọi email) — toast trung tính.
-                    ContextAction(ActionGlyph.Vector(Icons.Rounded.CopyAll, Primary), cd.copyContactInfo) {
-                        CallActions.copyContent(context, tgt.contact.copyInfoText())
-                    },
-                    ContextAction(ActionGlyph.Vector(Icons.Rounded.Edit, AccentBlue), cd.editContact) {
-                        tgt.contact.lookupUri()?.let { ContactActions.editContact(context, it) }
-                    },
-                    ContextAction(ActionGlyph.Vector(Icons.Rounded.DeleteOutline, AccentRed), cd.deleteContact) {
-                        tgt.contact.lookupUri()?.let { ContactActions.deleteContact(context, it) }
-                    },
-                ),
+                    add(ContextAction(ActionGlyph.Vector(Icons.Rounded.CopyAll, Primary), cd.copyContactInfo) {
+                        CallActions.copyContent(context, menuContact.copyInfoText())
+                    })
+                    if (menuContact.lookupKey != null) {
+                        add(ContextAction(ActionGlyph.Vector(Icons.Rounded.Edit, AccentBlue), cd.editContact) {
+                            menuContact.lookupUri()?.let { ContactActions.editContact(context, it) }
+                        })
+                        add(ContextAction(ActionGlyph.Vector(Icons.Rounded.DeleteOutline, AccentRed), cd.deleteContact) {
+                            menuContact.lookupUri()?.let { ContactActions.deleteContact(context, it) }
+                        })
+                    }
+                },
                 topInsetPx = statusBarPx,
                 bottomInsetPx = navBarPx,
                 onClosed = { contextTarget = null },
-                lifted = { ContactRowCard(contact = tgt.contact) },
+                lifted = { ContactRowCard(contact = menuContact) },
             )
         }
     }
@@ -499,17 +523,17 @@ fun ContactsScreen(
             contact = contact,
             onOpenNumber = onOpenNumber,
             onAddToCategory = { number -> addCategoryNumber = number },
-            onCreateCategory = { selected = null; onCreateCategory() },
+            onCreateCategory = { selectedId = null; onCreateCategory() },
             // Gửi mẫu / chia sẻ dùng số CHÍNH — đóng sheet liên hệ trước (lớp phủ soạn mẫu không được nằm sau sheet modal).
             onSendTemplate = {
                 contact.primaryPhone?.let { p ->
-                    selected = null
+                    selectedId = null
                     templateNumber = p.number
                     showTemplateSheet = true
                 }
             },
-            onShareContact = { selected = null; shareContact = contact },
-            onDismiss = { selected = null }
+            onShareContact = { selectedId = null; shareContactId = contact.id },
+            onDismiss = { selectedId = null }
         )
     }
 
@@ -526,7 +550,7 @@ fun ContactsScreen(
                             AddMemberResult.ADDED -> CallActions.toast(context, s.category.addedTo(label))
                             AddMemberResult.FULL -> CallActions.toast(context, s.category.maxMembers)
                             AddMemberResult.ALREADY -> CallActions.toast(context, s.category.alreadyAdded)
-                            AddMemberResult.INVALID -> {}
+                            AddMemberResult.INVALID -> CallActions.toast(context, s.category.invalidNumber)
                         }
                     } else {
                         categoryRepo.removeMember(cat.id, PhoneKey.of(number))
@@ -534,7 +558,7 @@ fun ContactsScreen(
                     }
                 }
             },
-            onCreateNew = { addCategoryNumber = null; selected = null; onCreateCategory() }
+            onCreateNew = { addCategoryNumber = null; selectedId = null; onCreateCategory() }
         )
     }
 
@@ -556,7 +580,7 @@ fun ContactsScreen(
     shareContact?.let { contact ->
         ShareContactSheet(
             detail = contact.toShareDetail(),
-            onDismiss = { shareContact = null }
+            onDismiss = { shareContactId = null }
         )
     }
 
@@ -628,9 +652,10 @@ private fun ContactRowCard(
             // Avatar XANH LÁ chủ đạo, chữ cái trắng (ảnh thì hiện ảnh) — đồng bộ nhật ký cuộc gọi.
             Box(modifier = Modifier.size(46.dp)) {
                 ContactAvatar(contact.displayName, contact.photoUri, 46.dp, circleColor = Primary, textColor = Color.White)
-                contact.primaryPhone?.let {
-                    AvatarCategoryBadges(it.number, modifier = Modifier.align(Alignment.BottomEnd))
-                }
+                // Badge GỘP badge của MỌI số (khử trùng nhóm) → khớp với sheet chi tiết; trước đây chỉ theo số CHÍNH
+                // nên nhóm gán ở số phụ không hiện badge ngoài danh sách.
+                val badges = contact.phones.flatMap { CategoryCatalog.badgesFor(it.number) }.distinctBy { it.categoryId }
+                AvatarCategoryBadges(badges, modifier = Modifier.align(Alignment.BottomEnd))
             }
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -642,7 +667,9 @@ private fun ContactRowCard(
                     maxLines = 2,               // tên dài xuống dòng (tối đa 2 dòng)
                     overflow = TextOverflow.Ellipsis
                 )
-                contact.primaryPhone?.let { phone ->
+                // Chỉ hiện phụ đề SỐ khi liên hệ CÓ tên — nếu không, tiêu đề đã là chính số (displayNameOrNumber),
+                // in lại sẽ thành số hai lần.
+                if (contact.displayName.isNotBlank()) contact.primaryPhone?.let { phone ->
                     Spacer(Modifier.height(3.dp))
                     Text(
                         text = formatPhone(phone.number),
@@ -684,7 +711,8 @@ private fun GrayChip(text: String) {
 /** Avatar liên hệ: ảnh (nếu có) hoặc VÒNG [circleColor] + chữ cái đầu màu [textColor]. */
 @Composable
 private fun ContactAvatar(name: String, photoUri: String?, size: Dp, circleColor: Color, textColor: Color) {
-    val photo = rememberContactPhoto(photoUri).bitmap
+    val photoState = rememberContactPhoto(photoUri)
+    val photo = photoState.bitmap
     when {
         photo != null -> Image(
             bitmap = photo,
@@ -692,6 +720,8 @@ private fun ContactAvatar(name: String, photoUri: String?, size: Dp, circleColor
             contentScale = ContentScale.Crop,
             modifier = Modifier.size(size).clip(CircleShape)
         )
+        // ĐANG giải mã ảnh (cache lạnh) → đĩa xám PHẲNG trung tính, KHÔNG loé chữ-cái xanh rồi mới hiện ảnh.
+        photoState.loading -> Box(modifier = Modifier.size(size).clip(CircleShape).background(CardFill))
         else -> Box(
             modifier = Modifier.size(size).clip(CircleShape).background(circleColor),
             contentAlignment = Alignment.Center
@@ -1128,6 +1158,9 @@ private fun AlphabetIndexBar(
 ) {
     if (letters.isEmpty()) return
     val haptic = LocalHapticFeedback.current
+    // Bám callback MỚI NHẤT: pointerInput chỉ khoá theo `letters`, không khởi động lại khi lambda đổi (vd sau khi
+    // danh bạ nạp lại, listing đổi index dòng). Không có cái này thì kéo mục lục cuộn tới dòng theo listing CŨ.
+    val focusLetter by rememberUpdatedState(onFocusLetter)
     val density = LocalDensity.current
     // Âm "tạch" như lẫy bánh răng: mỗi lần trượt sang chữ mới phát một tiếng. Giữ theo vòng đời màn,
     // nhả tài nguyên audio khi rời (đồng hành với rung ở cùng điểm đổi chữ bên dưới).
@@ -1166,14 +1199,17 @@ private fun AlphabetIndexBar(
                 awaitPointerEventScope {
                     while (true) {
                         val down = awaitFirstDown(requireUnconsumed = false)
-                        val pointerId = down.id // BÁM đúng ngón đã chạm (bỏ ngón thứ 2)
-                        lastFocused = null      // reset bộ-phát-hiện-đổi-chữ cho lượt kéo mới
-                        dragging = true
                         // Đọc hình học TỨC THỜI từ kích thước thật của vùng chạm → quy toạ độ chạm về trong DẢI.
                         val h = size.height.toFloat()
                         val slot = if (h > 0f) minOf(preferredSlotPx, h / n) else preferredSlotPx
                         val sHpx = slot * n
                         val top = ((h - sHpx) / 2f).coerceAtLeast(0f) // dải canh GIỮA vùng chạm
+                        // Chạm NGOÀI dải chữ (vùng trống trên/dưới pill) → KHÔNG bắt (không consume) để danh sách
+                        // nhận chạm/cuộn. Trước đây vùng chạm cao TOÀN màn nên nuốt tap/cuộn ở mép phải mỗi thẻ.
+                        if (down.position.y < top || down.position.y > top + sHpx) continue
+                        val pointerId = down.id // BÁM đúng ngón đã chạm (bỏ ngón thứ 2)
+                        lastFocused = null      // reset bộ-phát-hiện-đổi-chữ cho lượt kéo mới
+                        dragging = true
                         val focus: (Float) -> Unit = focus@{ rawY ->
                             if (slot <= 0f) return@focus
                             val local = (rawY - top).coerceIn(0f, sHpx) // trên dải→chữ đầu, dưới→chữ cuối
@@ -1184,7 +1220,7 @@ private fun AlphabetIndexBar(
                                 lastFocused = letter
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 tick.tick() // tiếng "tạch" đi kèm rung, đúng mỗi nấc chữ cái
-                                onFocusLetter(letter)
+                                focusLetter(letter)
                             }
                         }
                         focus(down.position.y)  // BẮT chữ + cuộn NGAY khi vừa chạm (không ngưỡng, không chờ)
