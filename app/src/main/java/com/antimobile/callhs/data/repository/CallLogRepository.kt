@@ -11,6 +11,8 @@ import com.antimobile.callhs.data.model.CallNumberDetail
 import com.antimobile.callhs.data.model.CallType
 import com.antimobile.callhs.util.CallResults
 import com.antimobile.callhs.util.Carrier
+import com.antimobile.callhs.util.ContactPhotoSignal
+import com.antimobile.callhs.util.PhoneKey
 import com.antimobile.callhs.util.SimRegistry
 import com.antimobile.callhs.util.SimScope
 
@@ -67,21 +69,32 @@ class CallLogRepository(private val context: Context) {
 
     /** Tất cả cuộc gọi với một số cụ thể + số liệu tổng hợp cho màn chi tiết. */
     fun loadDetail(number: String): CallNumberDetail {
+        // So khớp theo KHOÁ CHUẨN [PhoneKey] chứ KHÔNG so chuỗi chính xác: số từ danh bạ ("+84 912 345 678")
+        // gần như không bao giờ bằng byte-cho-byte với cột NUMBER của nhật ký ("0912345678"). Prefilter rẻ bằng
+        // LIKE '%<NSN>' rồi LỌC LẠI chính xác bằng PhoneKey (loại false-positive khi trùng đuôi số). Số ngắn/đặc
+        // biệt (dưới 9 số) hoặc rỗng (số ẩn danh) → giữ so khớp CHÍNH XÁC như cũ (không đủ số để khớp mờ an toàn).
+        val key = PhoneKey.of(number)
+        val useKey = key.length >= 9
         val raw = ArrayList<CallEntry>()
         resolver.query(
             CallLog.Calls.CONTENT_URI,
             projection,
-            "${CallLog.Calls.NUMBER} = ?",
-            arrayOf(number),
+            if (useKey) "${CallLog.Calls.NUMBER} LIKE ?" else "${CallLog.Calls.NUMBER} = ?",
+            if (useKey) arrayOf("%$key") else arrayOf(number),
             "${CallLog.Calls.DATE} DESC"
         )?.use { c ->
             val idx = ColumnIndex(c)
             while (c.moveToNext()) raw.add(idx.read(c))
         }
+        // Lọc CHÍNH XÁC theo khoá: LIKE có thể lọt cuộc trùng đuôi số (vd cùng 9 số cuối nhưng khác NSN).
+        val matched = if (useKey) raw.filter { PhoneKey.of(it.number) == key } else raw
+        // Số ĐẠI DIỆN dùng cho toàn màn (dial/nhắn/cước/thống kê + thêm nhóm) = số THỰC trong nhật ký khớp được,
+        // để mọi tầng dưới thao tác trên chuỗi khớp log; không có cuộc nào → giữ nguyên số gọi vào.
+        val canonicalNumber = matched.firstOrNull()?.number ?: number
         // Nhãn SIM theo các SIM ĐANG LẮP (đồng bộ trước) → cuộc của SIM đã tháo không bị gán nhãn; rồi lọc theo
         // phạm vi app. Số liệu tổng hợp bên dưới tính trên tập ĐÃ lọc.
         SimRegistry.refresh(context)
-        val entries = withContacts(SimScope.filter(assignSimLabels(raw)), contactDirectory())
+        val entries = withContacts(SimScope.filter(assignSimLabels(matched)), contactDirectory())
 
         val incoming = entries.count {
             it.type == CallType.INCOMING || it.type == CallType.ANSWERED_EXTERNALLY
@@ -90,16 +103,16 @@ class CallLogRepository(private val context: Context) {
         val missed = entries.count {
             it.type == CallType.MISSED || it.type == CallType.REJECTED || it.type == CallType.BLOCKED
         }
-        val contact = lookupContact(number)
+        val contact = lookupContact(canonicalNumber)
         val sims = entries.mapNotNull { it.simLabel }.distinct().sorted()
         return CallNumberDetail(
-            number = number,
+            number = canonicalNumber,
             // Danh tính (tên + ảnh + URI) lấy từ MỘT nguồn DUY NHẤT là PhoneLookup sống → header và
             // hàng "Thêm/Xem danh bạ" không bao giờ mâu thuẫn; liên hệ đã xoá → null ("Chưa lưu danh bạ").
             cachedName = contact?.displayName,
             photoUri = contact?.photoUri,
             geocodedLocation = entries.firstNotNullOfOrNull { it.geocodedLocation?.takeIf(String::isNotBlank) },
-            carrier = Carrier.of(number),
+            carrier = Carrier.of(canonicalNumber),
             simLabels = sims,
             entries = entries,
             totalCalls = entries.size,
@@ -176,10 +189,17 @@ class CallLogRepository(private val context: Context) {
     }
 
     /**
-     * Ảnh chụp danh bạ hiện tại: map "9 số cuối" → tên/ảnh liên hệ. Khoá theo 9 số cuối để khớp
-     * bất kể +84/0/khoảng trắng. Chưa cấp READ_CONTACTS → map RỖNG (tự fallback CACHED_NAME).
+     * Ảnh chụp danh bạ hiện tại: map KHOÁ CHUẨN [PhoneKey] → tên/ảnh liên hệ (khớp bất kể +84/0/khoảng trắng).
+     * Chưa cấp READ_CONTACTS → map RỖNG (tự fallback CACHED_NAME).
+     *
+     * CACHE cấp TIẾN TRÌNH theo [ContactPhotoSignal.generation]: nhiều ViewModel (danh sách/chi tiết/cước/thống kê)
+     * cùng gọi loadRecent/loadDetail, mỗi lần lại quét TOÀN bảng Phone (không LIMIT) — một đợt đồng bộ danh bạ có
+     * thể kích 4–8 lần quét đồng thời. Danh bạ đổi thì generation TĂNG (ContactsObserver) nên cache tự mới; giữa các
+     * lần đổi, mọi ViewModel DÙNG CHUNG một lần quét → giảm mạnh IO/pin/giật, dữ liệu vẫn tươi.
      */
     private fun contactDirectory(): Map<String, ContactInfo> {
+        val gen = ContactPhotoSignal.generation.intValue
+        dirCache?.let { if (dirCacheGen == gen) return it }
         val map = HashMap<String, ContactInfo>()
         try {
             resolver.query(
@@ -193,7 +213,7 @@ class CallLogRepository(private val context: Context) {
                 val nameIdx = c.getColumnIndexOrThrow(Phone.DISPLAY_NAME)
                 val photoIdx = c.getColumnIndexOrThrow(Phone.PHOTO_URI)
                 while (c.moveToNext()) {
-                    val key = phoneKey(c.getString(numIdx).orEmpty())
+                    val key = PhoneKey.of(c.getString(numIdx).orEmpty())
                     if (key.isNotEmpty()) {
                         map.putIfAbsent(key, ContactInfo(c.getString(nameIdx), c.getString(photoIdx)))
                     }
@@ -201,7 +221,10 @@ class CallLogRepository(private val context: Context) {
             }
         } catch (_: SecurityException) {
             // Chưa cấp READ_CONTACTS → giữ map rỗng, dùng CACHED_NAME sẵn có.
+            return map // không cache map rỗng do thiếu quyền (khi cấp quyền sau, generation chưa chắc đổi)
         }
+        dirCache = map
+        dirCacheGen = gen
         return map
     }
 
@@ -209,7 +232,7 @@ class CallLogRepository(private val context: Context) {
     private fun withContacts(entries: List<CallEntry>, dir: Map<String, ContactInfo>): List<CallEntry> {
         if (dir.isEmpty()) return entries
         return entries.map { e ->
-            val hit = dir[phoneKey(e.number)] ?: return@map e
+            val hit = dir[PhoneKey.of(e.number)] ?: return@map e
             e.copy(cachedName = hit.name ?: e.cachedName, photoUri = hit.photoUri ?: e.photoUri)
         }
     }
@@ -255,11 +278,9 @@ class CallLogRepository(private val context: Context) {
     }
 
     private companion object {
-        /** Khoá so khớp số điện thoại: chỉ giữ chữ số, lấy 9 số cuối (để +84… khớp 0…). */
-        fun phoneKey(raw: String): String {
-            val digits = raw.filter(Char::isDigit)
-            return if (digits.length >= 9) digits.takeLast(9) else digits
-        }
+        // Cache danh bạ cấp TIẾN TRÌNH (dùng chung mọi ViewModel), làm mới theo ContactPhotoSignal.generation.
+        @Volatile private var dirCache: Map<String, ContactInfo>? = null
+        @Volatile private var dirCacheGen: Int = -1
 
         fun mapType(value: Int): CallType = when (value) {
             CallLog.Calls.INCOMING_TYPE -> CallType.INCOMING

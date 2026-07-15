@@ -46,10 +46,14 @@ object Carrier {
         return byPrefix.firstOrNull { d.startsWith(it.first) }?.second
     }
 
-    /** Đưa về dạng nội địa "0xxxxxxxxx": bỏ ký tự thừa, đổi +84/84 thành 0. */
+    /** Đưa về dạng nội địa "0xxxxxxxxx": bỏ ký tự thừa, bỏ "00" quốc tế, đổi +84/84 → 0, thêm 0 cho NSN trần. */
     private fun normalize(number: String): String {
         var d = number.filter(Char::isDigit)
-        if (d.startsWith("84") && d.length >= 11) d = "0" + d.substring(2)
+        if (d.length > 2 && d.startsWith("00")) d = d.substring(2)           // mã truy cập quốc tế
+        when {
+            d.startsWith("84") && d.length >= 11 -> d = "0" + d.substring(2) // +84/84 → 0
+            d.length == 9 -> d = "0$d"                                       // NSN di động trần (thiếu số 0)
+        }
         return d
     }
 }
