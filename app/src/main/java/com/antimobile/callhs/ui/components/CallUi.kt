@@ -105,6 +105,10 @@ private val PhotoCache = object : LruCache<String, ImageBitmap>(8 * 1024 * 1024)
     override fun sizeOf(key: String, value: ImageBitmap): Int = (value.width * value.height * 4).coerceAtLeast(1)
 }
 
+// Khoá cache có kèm "$generation|" nên mỗi lần danh bạ đổi, các bitmap thế hệ CŨ trở nên vô dụng nhưng vẫn
+// nằm lại chiếm ngân sách 8MB. Đăng ký dọn sạch cache mỗi lần [ContactPhotoSignal.invalidate] để không rò bộ nhớ.
+private val photoCacheFlushHook: Unit = run { ContactPhotoSignal.onInvalidate = { PhotoCache.evictAll() } }
+
 /** Trạng thái ảnh liên hệ: [bitmap] khi đã có; [loading] = ĐANG giải mã (chỉ đúng khi có URI & cache lạnh). */
 data class ContactPhotoState(val bitmap: ImageBitmap?, val loading: Boolean)
 

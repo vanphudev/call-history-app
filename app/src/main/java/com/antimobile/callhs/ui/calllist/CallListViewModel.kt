@@ -14,7 +14,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.antimobile.callhs.data.model.CallEntry
 import com.antimobile.callhs.data.repository.CallLogRepository
-import com.antimobile.callhs.util.ContactsObserver
+import com.antimobile.callhs.util.ContactsSignal
 import com.antimobile.callhs.util.hasPermission
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -53,7 +53,7 @@ class CallListViewModel(app: Application) : AndroidViewModel(app) {
      * Danh bạ đổi (đổi tên/ảnh liên hệ, thêm/xoá số, đồng bộ tài khoản…) → nạp lại NGẦM để tên/ảnh trong
      * danh sách luôn mới, kể cả khi KHÔNG có cuộc gọi mới nào. Bổ trợ [observer] (chỉ bắt nhật ký cuộc gọi).
      */
-    private val contactsObserver = ContactsObserver(context) { load() }
+    init { ContactsSignal.observe(viewModelScope) { load() } }
 
     /** Nạp danh sách (lần đầu / tự động khi nhật ký đổi) — hiện loader toàn màn chỉ khi CHƯA có dữ liệu. */
     fun load() = fetch(userInitiated = false)
@@ -99,11 +99,10 @@ class CallListViewModel(app: Application) : AndroidViewModel(app) {
             observing = true
         }
         // Quyền Danh bạ là TUỲ CHỌN nên đăng ký riêng (lười): tự bám khi người dùng cấp quyền sau.
-        contactsObserver.ensureRegistered()
+        ContactsSignal.ensureRegistered(context)
     }
 
     override fun onCleared() {
         if (observing) resolver.unregisterContentObserver(observer)
-        contactsObserver.dispose()
     }
 }

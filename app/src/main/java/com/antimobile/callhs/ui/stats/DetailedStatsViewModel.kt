@@ -12,11 +12,12 @@ import com.antimobile.callhs.data.model.CallEntry
 import com.antimobile.callhs.data.repository.CallLogRepository
 import com.antimobile.callhs.util.CallCharge
 import com.antimobile.callhs.util.CallStats
-import com.antimobile.callhs.util.ContactsObserver
+import com.antimobile.callhs.util.ContactsSignal
 import com.antimobile.callhs.util.CostCalculator
 import com.antimobile.callhs.util.CostSummary
 import com.antimobile.callhs.util.DayActivity
 import com.antimobile.callhs.util.PeriodOverview
+import com.antimobile.callhs.util.PhoneKey
 import com.antimobile.callhs.util.PhoneStat
 import com.antimobile.callhs.util.SimInfo
 import com.antimobile.callhs.util.StatsPeriod
@@ -57,11 +58,12 @@ data class PeriodCost(
             val summary = CostCalculator.summarize(charges)
             val byNumber = charges
                 .filter { it.chargeable && it.cost > 0 }
-                .groupBy { it.entry.number }
-                .map { (number, list) ->
+                // Gộp theo KHOÁ CHUẨN [PhoneKey] → xếp hạng cước theo NGƯỜI, không tách "+84…"/"0…" thành 2 dòng.
+                .groupBy { PhoneKey.of(it.entry.number).ifEmpty { it.entry.number } }
+                .map { (_, list) ->
                     val rep = list.first().entry
                     NumberCost(
-                        number = number,
+                        number = rep.number,
                         cachedName = rep.cachedName?.takeIf { it.isNotBlank() },
                         photoUri = rep.photoUri,
                         cost = list.sumOf { it.cost },
@@ -115,13 +117,13 @@ class DetailedStatsViewModel(app: Application) : AndroidViewModel(app) {
     private var job: Job? = null
 
     /** Danh bạ đổi → nạp lại để tên/ảnh liên hệ trong bảng xếp hạng "Theo số" / "Cước phí" luôn mới. */
-    private val contactsObserver = ContactsObserver(app) { load() }
+    init { ContactsSignal.observe(viewModelScope) { load() } }
 
     fun load() {
         hasCallLogPermission = hasPermission(context, Manifest.permission.READ_CALL_LOG)
         hasPhonePermission = hasPermission(context, Manifest.permission.READ_PHONE_STATE)
         if (!hasCallLogPermission) return
-        contactsObserver.ensureRegistered()
+        ContactsSignal.ensureRegistered(context)
         job?.cancel()
         job = viewModelScope.launch {
             loading = true
@@ -173,7 +175,7 @@ class DetailedStatsViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
-        contactsObserver.dispose()
+        super.onCleared()
     }
 
     private companion object {

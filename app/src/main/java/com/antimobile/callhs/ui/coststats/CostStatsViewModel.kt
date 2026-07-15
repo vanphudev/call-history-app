@@ -11,7 +11,7 @@ import androidx.lifecycle.viewModelScope
 import com.antimobile.callhs.data.model.CallNumberDetail
 import com.antimobile.callhs.data.repository.CallLogRepository
 import com.antimobile.callhs.util.CallCharge
-import com.antimobile.callhs.util.ContactsObserver
+import com.antimobile.callhs.util.ContactsSignal
 import com.antimobile.callhs.util.CostCalculator
 import com.antimobile.callhs.util.CostSummary
 import com.antimobile.callhs.util.SimInfo
@@ -49,7 +49,7 @@ class CostStatsViewModel(app: Application) : AndroidViewModel(app) {
     private var job: Job? = null
 
     /** Danh bạ đổi → nạp lại để tên/ảnh liên hệ ở tiêu đề màn cước luôn khớp liên hệ hiện tại. */
-    private val contactsObserver = ContactsObserver(app) { refresh() }
+    init { ContactsSignal.observe(viewModelScope) { refresh() } }
 
     fun load(number: String) {
         // Đổi sang số khác → xoá dữ liệu số cũ NGAY để màn không hiện nhầm cước của số trước trong lúc nạp.
@@ -68,7 +68,7 @@ class CostStatsViewModel(app: Application) : AndroidViewModel(app) {
     private fun reload() {
         val number = currentNumber ?: return
         if (!hasPermission(context, Manifest.permission.READ_CALL_LOG)) return
-        contactsObserver.ensureRegistered()
+        ContactsSignal.ensureRegistered(context)
         job?.cancel()
         job = viewModelScope.launch {
             loading = true
@@ -96,6 +96,6 @@ class CostStatsViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
-        contactsObserver.dispose()
+        super.onCleared()
     }
 }

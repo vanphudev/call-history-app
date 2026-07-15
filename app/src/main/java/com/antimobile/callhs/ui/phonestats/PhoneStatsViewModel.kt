@@ -10,7 +10,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.antimobile.callhs.data.model.CallNumberDetail
 import com.antimobile.callhs.data.repository.CallLogRepository
-import com.antimobile.callhs.util.ContactsObserver
+import com.antimobile.callhs.util.ContactsSignal
 import com.antimobile.callhs.util.hasPermission
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -39,7 +39,7 @@ class PhoneStatsViewModel(app: Application) : AndroidViewModel(app) {
     private var job: Job? = null
 
     /** Danh bạ đổi → nạp lại để tên/ảnh liên hệ ở tiêu đề màn phân tích luôn khớp liên hệ hiện tại. */
-    private val contactsObserver = ContactsObserver(app) { refresh() }
+    init { ContactsSignal.observe(viewModelScope) { refresh() } }
 
     fun load(number: String) {
         // Đổi sang số khác → xoá dữ liệu số cũ NGAY để màn không hiện nhầm thống kê của số trước trong lúc nạp.
@@ -56,19 +56,20 @@ class PhoneStatsViewModel(app: Application) : AndroidViewModel(app) {
     private fun reload() {
         val number = currentNumber ?: return
         if (!hasPermission(context, Manifest.permission.READ_CALL_LOG)) return
-        contactsObserver.ensureRegistered()
+        ContactsSignal.ensureRegistered(context)
         job?.cancel()
         job = viewModelScope.launch {
             loading = true
             val data = withContext(Dispatchers.IO) {
                 runCatching { repo.loadDetail(number) }.getOrNull()
             }
-            if (data != null) detail = data
+            // Nạp lỗi → xoá dữ liệu (đồng nhất CallDetail/CostStatsViewModel), không giữ thống kê CŨ đã hết hiệu lực.
+            detail = data
             loading = false
         }
     }
 
     override fun onCleared() {
-        contactsObserver.dispose()
+        super.onCleared()
     }
 }

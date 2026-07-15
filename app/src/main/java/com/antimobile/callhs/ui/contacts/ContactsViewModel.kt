@@ -10,7 +10,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.antimobile.callhs.data.contacts.Contact
 import com.antimobile.callhs.data.contacts.ContactsRepository
-import com.antimobile.callhs.util.ContactsObserver
+import com.antimobile.callhs.util.ContactsSignal
 import com.antimobile.callhs.util.hasPermission
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -32,26 +32,36 @@ class ContactsViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var loaded by mutableStateOf(false)
         private set
+    // Lần nạp gần nhất THẤT BẠI (đọc danh bạ ném lỗi) → UI phân biệt "lỗi tải" với "danh bạ trống thật".
+    var loadFailed by mutableStateOf(false)
+        private set
     var hasContactsPermission by mutableStateOf(hasPermission(app, Manifest.permission.READ_CONTACTS))
         private set
 
     private var job: Job? = null
 
     /** Danh bạ máy đổi (sửa ở app Danh bạ, đồng bộ tài khoản…) → tự nạp lại NGẦM, không cần quay lại màn. */
-    private val contactsObserver = ContactsObserver(app) { load() }
+    init { ContactsSignal.observe(viewModelScope) { load() } }
 
     fun load() {
         hasContactsPermission = hasPermission(context, Manifest.permission.READ_CONTACTS)
         if (!hasContactsPermission) return
-        contactsObserver.ensureRegistered()
+        // Lần nạp ĐẦU đang chạy (chưa loaded) mà bị gọi lại (LaunchedEffect + ON_START cùng bắn lúc vào màn) →
+        // đừng huỷ rồi quét lại danh bạ lần nữa. Lần vào lại (đã loaded) vẫn nạp lại bình thường để bắt thay đổi.
+        if (job?.isActive == true && !loaded) return
+        ContactsSignal.ensureRegistered(context)
         job?.cancel()
         job = viewModelScope.launch {
             loading = true
-            val data = withContext(Dispatchers.IO) {
-                runCatching { repo.loadAll() }.getOrDefault(emptyList())
+            val result = withContext(Dispatchers.IO) { runCatching { repo.loadAll() } }
+            if (result.isSuccess) {
+                contacts = result.getOrDefault(emptyList())
+                loadFailed = false
+                loaded = true
+            } else {
+                // Lỗi đọc danh bạ (quyền bị thu hồi giữa chừng / provider lỗi) → GIỮ dữ liệu đang hiện, bật cờ lỗi.
+                loadFailed = true
             }
-            contacts = data
-            loaded = true
             loading = false
         }
     }
@@ -65,9 +75,5 @@ class ContactsViewModel(app: Application) : AndroidViewModel(app) {
         val nowGranted = hasPermission(context, Manifest.permission.READ_CONTACTS)
         hasContactsPermission = nowGranted
         if (nowGranted) load()
-    }
-
-    override fun onCleared() {
-        contactsObserver.dispose()
     }
 }

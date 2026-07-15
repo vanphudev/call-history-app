@@ -14,7 +14,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.antimobile.callhs.data.model.CallNumberDetail
 import com.antimobile.callhs.data.repository.CallLogRepository
-import com.antimobile.callhs.util.ContactsObserver
+import com.antimobile.callhs.util.ContactsSignal
 import com.antimobile.callhs.util.SimScope
 import com.antimobile.callhs.util.hasPermission
 import kotlinx.coroutines.Dispatchers
@@ -50,12 +50,19 @@ class CallDetailViewModel(app: Application) : AndroidViewModel(app) {
      * Danh bạ đổi → nạp lại số đang xem để tên/ảnh ở tiêu đề + hàng "Thêm/Xem danh bạ" luôn khớp liên hệ
      * hiện tại (vd vừa lưu số này thành liên hệ, hoặc đổi tên). Bổ trợ [observer] (chỉ bắt nhật ký cuộc gọi).
      */
-    private val contactsObserver = ContactsObserver(context) { refresh() }
+    init { ContactsSignal.observe(viewModelScope) { refresh() } }
 
     fun load(number: String) {
-        // Cùng số + đã có dữ liệu + phạm vi SIM KHÔNG đổi → khỏi nạp lại. Nếu phạm vi đã đổi (Cài đặt) thì
-        // dù cùng số vẫn phải nạp lại để lọc theo SIM đang xem.
-        if (currentNumber == number && detail != null && loadedScope == SimScope.scope) return
+        // Cùng số + đã có dữ liệu + phạm vi SIM HIỆU LỰC không đổi → khỏi nạp lại. So [SimScope.effectiveLabel]
+        // (nhãn thực sự đang lọc, đã tính SIM có lắp hay không) chứ KHÔNG so [SimScope.scope] thô — nếu không,
+        // sau khi lắp lại SIM đã lưu, guard tưởng dữ liệu cũ (chưa lọc) còn hợp lệ.
+        if (currentNumber == number && detail != null && loadedScope == SimScope.effectiveLabel) return
+        // Đổi sang số khác → XOÁ dữ liệu số cũ NGAY để màn (và AllCalls/Timeline dùng chung VM) không vẽ nhầm
+        // chi tiết + nút gọi/nhắn của số TRƯỚC trong lúc truy vấn số mới (khớp CostStats/PhoneStatsViewModel).
+        if (number != currentNumber) {
+            detail = null
+            loadedScope = null
+        }
         currentNumber = number
         reload()
     }
@@ -77,7 +84,7 @@ class CallDetailViewModel(app: Application) : AndroidViewModel(app) {
                 runCatching { repo.loadDetail(number) }.getOrNull()
             }
             detail = data
-            loadedScope = SimScope.scope   // ghi lại phạm vi mà dữ liệu hiện tại được nạp theo
+            loadedScope = SimScope.effectiveLabel   // ghi lại phạm vi HIỆU LỰC mà dữ liệu hiện tại được nạp theo
             loading = false
         }
     }
@@ -93,11 +100,10 @@ class CallDetailViewModel(app: Application) : AndroidViewModel(app) {
             observing = true
         }
         // Quyền Danh bạ là TUỲ CHỌN nên đăng ký riêng (lười): tự bám khi người dùng cấp quyền sau.
-        contactsObserver.ensureRegistered()
+        ContactsSignal.ensureRegistered(context)
     }
 
     override fun onCleared() {
         if (observing) resolver.unregisterContentObserver(observer)
-        contactsObserver.dispose()
     }
 }

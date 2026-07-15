@@ -11,7 +11,7 @@ import com.antimobile.callhs.data.local.AddMemberResult
 import com.antimobile.callhs.data.local.Category
 import com.antimobile.callhs.data.local.CategoryMember
 import com.antimobile.callhs.data.local.CategoryRepository
-import com.antimobile.callhs.util.ContactsObserver
+import com.antimobile.callhs.util.ContactsSignal
 import com.antimobile.callhs.util.PhoneKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -32,7 +32,7 @@ data class MemberRow(
 
 /**
  * VM cho màn soạn nhóm. Với nhóm ĐANG SỬA: nạp thông tin nhóm + theo dõi danh sách thành viên (Room Flow)
- * và giải TÊN/ẢNH danh bạ theo số (giống CallListScreen) — refresh khi danh bạ đổi qua [ContactsObserver].
+ * và giải TÊN/ẢNH danh bạ theo số (giống CallListScreen) — refresh khi danh bạ đổi qua [ContactsSignal].
  * Với nhóm TẠO MỚI (id ≤ 0): chỉ để lưu (create) khi bấm Lưu.
  */
 class CategoryEditorViewModel(app: Application) : AndroidViewModel(app) {
@@ -52,7 +52,7 @@ class CategoryEditorViewModel(app: Application) : AndroidViewModel(app) {
     private var rawMembers: List<CategoryMember> = emptyList()
     private var contactIndex: Map<String, Pair<String?, String?>> = emptyMap()
     private var membersJob: Job? = null
-    private val contactsObserver = ContactsObserver(app) { loadContacts() }
+    init { ContactsSignal.observe(viewModelScope) { loadContacts() } }
 
     fun bind(id: Long) {
         if (bound) return
@@ -72,7 +72,7 @@ class CategoryEditorViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun loadContacts() {
         viewModelScope.launch {
-            contactsObserver.ensureRegistered()
+            ContactsSignal.ensureRegistered(getApplication())
             val idx = withContext(Dispatchers.IO) {
                 runCatching {
                     val map = HashMap<String, Pair<String?, String?>>()
@@ -119,6 +119,6 @@ class CategoryEditorViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
-        contactsObserver.dispose()
+        super.onCleared()
     }
 }

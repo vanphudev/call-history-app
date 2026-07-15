@@ -9,7 +9,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.antimobile.callhs.data.repository.CallLogRepository
-import com.antimobile.callhs.util.ContactsObserver
+import com.antimobile.callhs.util.ContactsSignal
 import com.antimobile.callhs.util.RepeatAnalysis
 import com.antimobile.callhs.util.RepeatFilter
 import com.antimobile.callhs.util.RepeatNumber
@@ -57,12 +57,12 @@ class RepeatStatsViewModel(app: Application) : AndroidViewModel(app) {
     private var job: Job? = null
 
     /** Danh bạ đổi → nạp lại để tên/ảnh liên hệ trong danh sách số gọi lại/trùng số luôn mới. */
-    private val contactsObserver = ContactsObserver(app) { load() }
+    init { ContactsSignal.observe(viewModelScope) { load() } }
 
     fun load() {
         hasCallLogPermission = hasPermission(context, Manifest.permission.READ_CALL_LOG)
         if (!hasCallLogPermission) return
-        contactsObserver.ensureRegistered()
+        ContactsSignal.ensureRegistered(context)
         job?.cancel()
         job = viewModelScope.launch {
             loading = true
@@ -106,7 +106,7 @@ class RepeatStatsViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
-        contactsObserver.dispose()
+        super.onCleared()
     }
 
     private companion object {
