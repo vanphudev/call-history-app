@@ -194,6 +194,7 @@ object EnStrings : AppStrings {
     private object CallDetail : CallDetailStrings {
         override val loading = "Loading details…"
         override val emptyNoCalls = "No calls with this number."
+        override fun emptyNoCallsInScope(label: String) = "No calls on $label with this number. Choose “All SIMs” in Settings to see everything."
         override val costStats = "Call charges"
         override val copyNumber = "Copy number"
 
@@ -261,6 +262,7 @@ object EnStrings : AppStrings {
         override val loading = "Loading contacts…"
         override val emptyNoContacts = "No contacts on this device."
         override val emptyNoResults = "No matching contacts."
+        override val loadError = "Couldn't read contacts. Check the permission and try again."
         override fun morePhones(n: Int) = "+$n more"
         override val sheetTitle = "Contact info"
         override val phonesSection = "Phone numbers"
@@ -927,6 +929,7 @@ object EnStrings : AppStrings {
         override val maxCategories = "You can create at most 5 categories"
         override val maxMembers = "This category is full (100 numbers max)"
         override val alreadyAdded = "Number already in this category"
+        override val invalidNumber = "Invalid number, can't add to a category"
         override fun addedTo(name: String): String = "Added to “$name”"
         override fun removedFrom(name: String): String = "Removed from “$name”"
     }

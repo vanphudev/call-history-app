@@ -184,6 +184,7 @@ object ViStrings : AppStrings {
     private object CallDetail : CallDetailStrings {
         override val loading = "Đang tải chi tiết…"
         override val emptyNoCalls = "Không có cuộc gọi nào với số này."
+        override fun emptyNoCallsInScope(label: String) = "Không có cuộc gọi nào của $label với số này. Chọn “Tất cả SIM” ở Cài đặt để xem đầy đủ."
         override val costStats = "Cước cuộc gọi"
         override val copyNumber = "Sao chép số"
 
@@ -251,6 +252,7 @@ object ViStrings : AppStrings {
         override val loading = "Đang tải danh bạ…"
         override val emptyNoContacts = "Chưa có liên hệ nào trong danh bạ."
         override val emptyNoResults = "Không tìm thấy liên hệ phù hợp."
+        override val loadError = "Không đọc được danh bạ. Kiểm tra quyền và thử lại."
         override fun morePhones(n: Int) = "+$n số"
         override val sheetTitle = "Thông tin liên hệ"
         override val phonesSection = "Số điện thoại"
@@ -916,6 +918,7 @@ object ViStrings : AppStrings {
         override val maxCategories = "Chỉ tạo được tối đa 5 nhóm"
         override val maxMembers = "Nhóm đã đạt tối đa 100 số"
         override val alreadyAdded = "Số đã có trong nhóm này"
+        override val invalidNumber = "Số không hợp lệ, không thể thêm vào nhóm"
         override fun addedTo(name: String): String = "Đã thêm vào “$name”"
         override fun removedFrom(name: String): String = "Đã gỡ khỏi “$name”"
     }

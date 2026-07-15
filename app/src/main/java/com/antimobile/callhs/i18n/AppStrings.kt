@@ -219,6 +219,8 @@ interface CallDetailStrings {
     // Top bar + trạng thái
     val loading: String
     val emptyNoCalls: String
+    /** Không có cuộc gọi vì đang lọc theo phạm vi SIM ([label] = "SIM 1"/"SIM 2") — gợi ý xem tất cả SIM. */
+    fun emptyNoCallsInScope(label: String): String
     val costStats: String
     val copyNumber: String
 
@@ -302,6 +304,7 @@ interface ContactsStrings {
     val loading: String
     val emptyNoContacts: String
     val emptyNoResults: String
+    val loadError: String          // đọc danh bạ thất bại (khác với "danh bạ trống")
     fun morePhones(n: Int): String
     val sheetTitle: String
     val phonesSection: String
@@ -1094,6 +1097,7 @@ interface CategoryStrings {
     val maxCategories: String
     val maxMembers: String
     val alreadyAdded: String
+    val invalidNumber: String      // số rỗng/ẩn danh không thể thêm vào nhóm
     fun addedTo(name: String): String
     fun removedFrom(name: String): String
 }
