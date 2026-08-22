@@ -34,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.AccountBalance
+import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.Category
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.FormatSize
@@ -47,6 +48,7 @@ import androidx.compose.material.icons.rounded.Phone
 import androidx.compose.material.icons.rounded.PrivacyTip
 import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Repeat
+import androidx.compose.material.icons.rounded.SettingsBackupRestore
 import androidx.compose.material.icons.rounded.SimCard
 import androidx.compose.material.icons.rounded.Smartphone
 import androidx.compose.material.icons.rounded.Sms
@@ -124,6 +126,8 @@ fun SettingsScreen(
     onOpenDirectory: (AgencyDataset) -> Unit,
     onOpenLegal: (String) -> Unit,
     onOpenCategories: () -> Unit,
+    onOpenCallBlocking: () -> Unit,
+    onOpenBackup: () -> Unit,
     onOpenDonate: () -> Unit
 ) {
     val context = LocalContext.current
@@ -190,6 +194,11 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(22.dp))
 
+            SectionTitle(s.blocker.settingsSection)
+            CallBlockingCard(onClick = onOpenCallBlocking)
+
+            Spacer(Modifier.height(22.dp))
+
             SectionTitle(s.settings.sectionMessaging)
             MessageTemplatesCard(onClick = onOpenTemplates)
             Spacer(Modifier.height(12.dp))
@@ -218,6 +227,11 @@ fun SettingsScreen(
             FontSizeCard(onClick = onOpenFontSize)
             Spacer(Modifier.height(12.dp))
             LanguageCard(onClick = onOpenLanguage)
+
+            Spacer(Modifier.height(22.dp))
+
+            SectionTitle(s.backup.settingsSection)
+            BackupCard(onClick = onOpenBackup)
 
             Spacer(Modifier.height(22.dp))
 
@@ -845,6 +859,54 @@ private fun AgencyDirectoryCard(onClick: () -> Unit) {
     }
 }
 
+/** Thẻ SAO LƯU & KHÔI PHỤC: icon + tiêu đề + phụ đề + mũi tên → mở màn sao lưu/khôi phục dữ liệu. */
+@Composable
+private fun BackupCard(onClick: () -> Unit) {
+    val s = appStrings().backup
+    PanelCard(modifier = Modifier.fillMaxWidth(), radius = 22.dp) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(horizontal = 16.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier.size(56.dp).clip(RoundedCornerShape(16.dp)).background(BrandSoft),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Rounded.SettingsBackupRestore, contentDescription = null, tint = Primary, modifier = Modifier.size(28.dp))
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = s.cardTitle,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = TextPrimary,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = s.cardSubtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Spacer(Modifier.width(10.dp))
+            Icon(
+                imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                contentDescription = s.open,
+                tint = TextSecondary,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+    }
+}
+
 /** Thẻ PHÂN LOẠI NHÓM: icon + tiêu đề + phụ đề + mũi tên → mở màn danh sách nhóm phân loại. */
 @Composable
 private fun CategoriesCard(onClick: () -> Unit) {
@@ -885,6 +947,54 @@ private fun CategoriesCard(onClick: () -> Unit) {
             Icon(
                 imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
                 contentDescription = appStrings().category.open,
+                tint = TextSecondary,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+    }
+}
+
+/** Thẻ CHẶN CUỘC GỌI: đi tới cổng ROLE_CALL_SCREENING rồi danh sách quy tắc/lịch sử. */
+@Composable
+private fun CallBlockingCard(onClick: () -> Unit) {
+    val s = appStrings().blocker
+    PanelCard(modifier = Modifier.fillMaxWidth(), radius = 22.dp) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(horizontal = 16.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier.size(56.dp).clip(RoundedCornerShape(16.dp)).background(BrandSoft),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Rounded.Block, contentDescription = null, tint = Primary, modifier = Modifier.size(28.dp))
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = s.settingsTitle,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = TextPrimary,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = s.settingsSubtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Spacer(Modifier.width(10.dp))
+            Icon(
+                imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                contentDescription = s.settingsOpen,
                 tint = TextSecondary,
                 modifier = Modifier.size(22.dp)
             )

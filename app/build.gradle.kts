@@ -23,8 +23,8 @@ android {
         applicationId = "com.antimobile.callhs"
         minSdk = 29
         targetSdk = 36
-        versionCode = 3
-        versionName = "26.1.1"
+        versionCode = 4
+        versionName = "26.1.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -60,7 +60,7 @@ android {
     }
 }
 
-// Export Room schemas so future DB versions get real, reviewable migrations (no destructive fallback).
+// Export the current development schema; before public release it remains the single v1 baseline.
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }

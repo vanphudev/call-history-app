@@ -27,6 +27,9 @@
 
     <uses-permission android:name="android.permission.CAMERA" />
 
+    <!-- Notification riêng sau khi CallScreeningService đã chặn cuộc gọi (Android 13+ xin runtime). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <queries>
         <package android:name="com.zing.zalo" />
         <package android:name="com.android.chrome" />
@@ -38,6 +41,8 @@
 
     <application
         android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -56,6 +61,16 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Android chỉ bind service này sau khi người dùng chọn CallHS cho ROLE_CALL_SCREENING. -->
+        <service
+            android:name=".data.blocking.CallBlockScreeningService"
+            android:exported="true"
+            android:permission="android.permission.BIND_SCREENING_SERVICE">
+            <intent-filter>
+                <action android:name="android.telecom.CallScreeningService" />
+            </intent-filter>
+        </service>
 
         <provider
             android:name="androidx.core.content.FileProvider"

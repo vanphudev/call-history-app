@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>
+        <!-- Exclude the temporary pause/session namespace and repeated-call ledger. Durable
+             blocker settings transfer together with the Room rules. -->
+        <exclude domain="sharedpref" path="call_block_runtime_state.xml" />
+        <exclude domain="sharedpref" path="call_block_runtime_state.xml.bak" />
+        <exclude domain="sharedpref" path="call_block_repeat_unknown_attempts.xml" />
+        <exclude domain="sharedpref" path="call_block_repeat_unknown_attempts.xml.bak" />
+        <exclude domain="sharedpref" path="call_block_repeat_unknown_guard_attempts.xml" />
+        <exclude domain="sharedpref" path="call_block_repeat_unknown_guard_attempts.xml.bak" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="call_block_runtime_state.xml" />
+        <exclude domain="sharedpref" path="call_block_runtime_state.xml.bak" />
+        <exclude domain="sharedpref" path="call_block_repeat_unknown_attempts.xml" />
+        <exclude domain="sharedpref" path="call_block_repeat_unknown_attempts.xml.bak" />
+        <exclude domain="sharedpref" path="call_block_repeat_unknown_guard_attempts.xml" />
+        <exclude domain="sharedpref" path="call_block_repeat_unknown_guard_attempts.xml.bak" />
+    </device-transfer>
+</data-extraction-rules>

@@ -43,7 +43,7 @@ data class Release(
  * ```
  * Bản nào **không có gì để khai thì không cần entry** — mọi cơ chế tự im lặng.
  *
- * ### Ba luật bất di bất dịch
+ * ### Ba quy tắc bất di bất dịch
  * 1. **KHÔNG BAO GIỜ sửa/xoá một entry đã phát hành.** Nó là lịch sử; sửa = viết lại quá khứ và
  *    người dùng cũ sẽ nhận nhầm thông báo / mẫu.
  * 2. **KHÔNG BAO GIỜ đổi [SystemTemplate.stableKey]** đã ship — đổi là coi như mẫu mới, sẽ gieo lại
@@ -66,12 +66,12 @@ object Releases {
      * Người dùng cài từ bản CŨ HƠN (app chưa có [AppMigrations]) được coi như đang đứng ở đây: mọi thứ
      * khai ở các entry `<=` số này họ đã có sẵn rồi, chỉ áp dụng những entry MỚI HƠN.
      */
-    const val BASELINE_VERSION_CODE = 3
+    const val BASELINE_VERSION_CODE = 1
 
     val ALL: List<Release> = listOf(
 
         Release(
-            versionCode = 3,
+            versionCode = 1,
             versionName = "26.1.1",
             summary = "Mốc gốc. Bốn mẫu tin nhắn đầu tiên. Bản đầu tiên có hệ thống cập nhật/reset.",
             newTemplates = listOf(
@@ -102,9 +102,9 @@ object Releases {
                     stableKey = "sys_v1_chuyen_khoan",
                     title = "4. Chuyển khoản - Ngân hàng",
                     content = """
-                    • Bank: 
-                    • STK: 
-                    • Tong: 
+                    Bank:
+                    STK:
+                    Tong:
                 """.trimIndent()
                 )
             )

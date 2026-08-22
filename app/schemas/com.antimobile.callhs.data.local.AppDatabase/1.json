@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "82f6b5f68d0d74ff1802094d8552e899",
+    "identityHash": "94a638978fcf7d42dcdec2d25ad7eef8",
     "entities": [
       {
         "tableName": "categories",
@@ -147,11 +147,300 @@
             ]
           }
         ]
+      },
+      {
+        "tableName": "call_block_rules",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `type` TEXT NOT NULL, `rawValue` TEXT NOT NULL, `matchValue` TEXT NOT NULL, `enabled` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `action` TEXT NOT NULL, `scope` TEXT NOT NULL, `userOrder` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rawValue",
+            "columnName": "rawValue",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "matchValue",
+            "columnName": "matchValue",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "enabled",
+            "columnName": "enabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "action",
+            "columnName": "action",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "scope",
+            "columnName": "scope",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userOrder",
+            "columnName": "userOrder",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_call_block_rules_action_type_matchValue_scope",
+            "unique": true,
+            "columnNames": [
+              "action",
+              "type",
+              "matchValue",
+              "scope"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_call_block_rules_action_type_matchValue_scope` ON `${TABLE_NAME}` (`action`, `type`, `matchValue`, `scope`)"
+          },
+          {
+            "name": "index_call_block_rules_enabled",
+            "unique": false,
+            "columnNames": [
+              "enabled"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_call_block_rules_enabled` ON `${TABLE_NAME}` (`enabled`)"
+          },
+          {
+            "name": "index_call_block_rules_userOrder",
+            "unique": false,
+            "columnNames": [
+              "userOrder"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_call_block_rules_userOrder` ON `${TABLE_NAME}` (`userOrder`)"
+          }
+        ]
+      },
+      {
+        "tableName": "call_block_number_entries",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `action` TEXT NOT NULL, `rawNumber` TEXT NOT NULL, `phoneKey` TEXT NOT NULL, `displayName` TEXT NOT NULL, `origin` TEXT NOT NULL, `enabled` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "action",
+            "columnName": "action",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rawNumber",
+            "columnName": "rawNumber",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "phoneKey",
+            "columnName": "phoneKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "displayName",
+            "columnName": "displayName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "origin",
+            "columnName": "origin",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "enabled",
+            "columnName": "enabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_call_block_number_entries_action_phoneKey",
+            "unique": true,
+            "columnNames": [
+              "action",
+              "phoneKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_call_block_number_entries_action_phoneKey` ON `${TABLE_NAME}` (`action`, `phoneKey`)"
+          },
+          {
+            "name": "index_call_block_number_entries_phoneKey",
+            "unique": false,
+            "columnNames": [
+              "phoneKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_call_block_number_entries_phoneKey` ON `${TABLE_NAME}` (`phoneKey`)"
+          },
+          {
+            "name": "index_call_block_number_entries_action",
+            "unique": false,
+            "columnNames": [
+              "action"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_call_block_number_entries_action` ON `${TABLE_NAME}` (`action`)"
+          },
+          {
+            "name": "index_call_block_number_entries_enabled",
+            "unique": false,
+            "columnNames": [
+              "enabled"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_call_block_number_entries_enabled` ON `${TABLE_NAME}` (`enabled`)"
+          }
+        ]
+      },
+      {
+        "tableName": "call_block_history",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `rawNumber` TEXT NOT NULL, `phoneKey` TEXT NOT NULL, `blockedAt` INTEGER NOT NULL, `ruleType` TEXT NOT NULL, `ruleValue` TEXT NOT NULL, `ruleScope` TEXT NOT NULL, `consecutiveUnanswered` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rawNumber",
+            "columnName": "rawNumber",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "phoneKey",
+            "columnName": "phoneKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "blockedAt",
+            "columnName": "blockedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ruleType",
+            "columnName": "ruleType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ruleValue",
+            "columnName": "ruleValue",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ruleScope",
+            "columnName": "ruleScope",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "consecutiveUnanswered",
+            "columnName": "consecutiveUnanswered",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_call_block_history_phoneKey",
+            "unique": false,
+            "columnNames": [
+              "phoneKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_call_block_history_phoneKey` ON `${TABLE_NAME}` (`phoneKey`)"
+          },
+          {
+            "name": "index_call_block_history_blockedAt",
+            "unique": false,
+            "columnNames": [
+              "blockedAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_call_block_history_blockedAt` ON `${TABLE_NAME}` (`blockedAt`)"
+          },
+          {
+            "name": "index_call_block_history_phoneKey_blockedAt_ruleType_ruleValue",
+            "unique": true,
+            "columnNames": [
+              "phoneKey",
+              "blockedAt",
+              "ruleType",
+              "ruleValue"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_call_block_history_phoneKey_blockedAt_ruleType_ruleValue` ON `${TABLE_NAME}` (`phoneKey`, `blockedAt`, `ruleType`, `ruleValue`)"
+          }
+        ]
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '82f6b5f68d0d74ff1802094d8552e899')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '94a638978fcf7d42dcdec2d25ad7eef8')"
     ]
   }
 }

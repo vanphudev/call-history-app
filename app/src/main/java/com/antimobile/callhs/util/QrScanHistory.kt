@@ -2,6 +2,8 @@ package com.antimobile.callhs.util
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.antimobile.callhs.data.backup.MergeMode
+import com.antimobile.callhs.data.backup.SectionResult
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -68,5 +70,65 @@ object QrScanHistoryStore {
     fun clear(context: Context): List<QrScanEntry> {
         prefs(context).edit().remove(KEY).apply()
         return emptyList()
+    }
+
+    /**
+     * KHÔI PHỤC lịch sử quét QR từ bản sao lưu theo [mode]. Khoá so trùng = nội dung GỐC ([QrScanEntry.raw]).
+     *  - [MergeMode.REPLACE]: lịch sử trở thành đúng [incoming] (khử trùng, giữ mốc mới hơn).
+     *  - [MergeMode.ADD]: GIỮ mọi mục hiện có; chỉ thêm nội dung CHƯA có vào các chỗ trống còn lại.
+     *  - [MergeMode.UPDATE]: như ADD, nhưng nội dung trùng → cập nhật lên MỐC THỜI GIAN mới hơn.
+     *
+     * Lịch sử là "vòng đệm" tối đa [MAX] mục mới nhất. Điểm mấu chốt: khi cắt còn [MAX], mục HIỆN CÓ được ưu
+     * tiên GIỮ (xếp trước), phần mới chỉ điền vào chỗ còn trống — nên ADD/UPDATE KHÔNG bao giờ hất mục hiện có
+     * ra để nhường cho mục từ bản sao lưu (đúng cam kết "giữ mục hiện có"). [SectionResult] đếm theo số THỰC SỰ
+     * được lưu sau khi cắt; đụng cắt → [SectionResult.truncated] = true.
+     */
+    fun restore(context: Context, incoming: List<QrScanEntry>, mode: MergeMode): SectionResult {
+        if (mode == MergeMode.REPLACE) {
+            // Thay toàn bộ: khử trùng raw (giữ mốc mới nhất), sắp mới→cũ, cắt còn MAX.
+            val byRaw = LinkedHashMap<String, QrScanEntry>()
+            for (e in incoming) {
+                val ex = byRaw[e.raw]
+                if (ex == null || e.time > ex.time) byRaw[e.raw] = e
+            }
+            val capped = byRaw.values.sortedByDescending { it.time }.take(MAX)
+            save(context, capped)
+            return SectionResult(added = capped.size, truncated = byRaw.size > MAX)
+        }
+
+        // ADD / UPDATE: giữ mục hiện có; nội dung mới đưa vào danh sách "fresh".
+        val kept = LinkedHashMap<String, QrScanEntry>()
+        load(context).forEach { kept[it.raw] = it }
+        val fresh = ArrayList<QrScanEntry>()
+        val seenFresh = HashSet<String>()
+        var updated = 0
+        var skipped = 0
+        for (e in incoming) {
+            val ex = kept[e.raw]
+            when {
+                ex != null -> {
+                    // Trùng với mục hiện có: UPDATE + mốc mới hơn → cập nhật; còn lại → bỏ qua (giữ nguyên).
+                    if (mode == MergeMode.UPDATE && e.time > ex.time) {
+                        kept[e.raw] = e; updated++
+                    } else {
+                        skipped++
+                    }
+                }
+                e.raw in seenFresh -> skipped++ // trùng trong chính bản sao lưu
+                else -> {
+                    seenFresh.add(e.raw); fresh.add(e)
+                }
+            }
+        }
+
+        // Xếp mục hiện có trước (không bao giờ bị hất), rồi tới mục mới; cắt còn MAX.
+        val keptSorted = kept.values.sortedByDescending { it.time }
+        val freshSorted = fresh.sortedByDescending { it.time }
+        val capped = (keptSorted + freshSorted).take(MAX)
+        save(context, capped)
+        // "added" = số mục MỚI thực sự lọt vào danh sách sau khi cắt.
+        val added = capped.count { it.raw in seenFresh }
+        val truncated = keptSorted.size + freshSorted.size > MAX
+        return SectionResult(added = added, updated = updated, skipped = skipped, truncated = truncated)
     }
 }

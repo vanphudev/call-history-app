@@ -67,7 +67,6 @@ import androidx.compose.material.icons.automirrored.rounded.CallMissed
 import androidx.compose.material.icons.automirrored.rounded.CallReceived
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CalendarMonth
-import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Contacts
 import androidx.compose.material.icons.rounded.ChevronLeft
 import androidx.compose.material.icons.rounded.ChevronRight
@@ -80,6 +79,7 @@ import androidx.compose.material.icons.rounded.Dialpad
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Today
 import androidx.compose.material.icons.rounded.Settings
@@ -149,8 +149,10 @@ import com.antimobile.callhs.i18n.appStrings
 import com.antimobile.callhs.ui.components.AppBottomSheet
 import com.antimobile.callhs.ui.components.ContactsPermissionBanner
 import com.antimobile.callhs.ui.components.EmptyState
+import com.antimobile.callhs.ui.components.FilterOptionRow
 import com.antimobile.callhs.ui.components.LoadingState
 import com.antimobile.callhs.ui.components.PermissionState
+import com.antimobile.callhs.ui.components.QrScanFlow
 import com.antimobile.callhs.ui.components.SearchEntry
 import com.antimobile.callhs.ui.components.SearchHistoryView
 import com.antimobile.callhs.ui.components.SectionHeader
@@ -158,8 +160,8 @@ import com.antimobile.callhs.ui.components.SimScopeStatusPill
 import com.antimobile.callhs.ui.components.SimSegmentedToggle
 import com.antimobile.callhs.ui.components.loadSearchHistory
 import com.antimobile.callhs.ui.components.pushSearch
+import com.antimobile.callhs.ui.components.rememberQrScanFlowState
 import com.antimobile.callhs.ui.components.saveSearchHistory
-import com.antimobile.callhs.ui.theme.AccentGrayBg
 import com.antimobile.callhs.ui.theme.AppBackground
 import com.antimobile.callhs.ui.theme.BrandSoft
 import com.antimobile.callhs.ui.theme.CardSurface
@@ -186,8 +188,8 @@ import java.time.YearMonth
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 
-private enum class TypeFilter { ALL, MISSED, OUTGOING, INCOMING }
-private enum class DateFilter { NONE, TODAY, YESTERDAY, WEEK, MONTH, CUSTOM }
+internal enum class TypeFilter { ALL, MISSED, OUTGOING, INCOMING }
+internal enum class DateFilter { NONE, TODAY, YESTERDAY, WEEK, MONTH, CUSTOM }
 
 /** Cuộc gọi KẾT THÚC trong khoảng này (ms) so với hiện tại → item của nó LOÉ SÁNG báo "vừa mới". */
 private const val RECENT_CALL_FLASH_MS = 40_000L
@@ -195,9 +197,9 @@ private const val RECENT_CALL_FLASH_MS = 40_000L
 private const val RECENT_CALL_SKEW_MS = 10_000L
 
 /** Kiểu hiển thị danh sách: theo THỜI GIAN (mỗi cuộc 1 dòng, như cũ) hay theo SỐ (gộp mỗi số 1 dòng). */
-private enum class ViewMode { BY_TIME, BY_PHONE }
+internal enum class ViewMode { BY_TIME, BY_PHONE }
 
-private sealed interface Row2 {
+internal sealed interface Row2 {
     data class Header(val label: String) : Row2
     /** [missedStreak] > 0 chỉ ở chế độ theo SỐ (gộp) — số cuộc nhỡ liên tiếp cuối cùng; theo THỜI GIAN luôn 0. */
     data class Item(val entry: CallEntry, val missedStreak: Int) : Row2
@@ -417,6 +419,9 @@ fun CallListScreen(
     val navBarPx = WindowInsets.navigationBars.getBottom(density)
     var contextTarget by remember { mutableStateOf<CallContextTarget?>(null) }
 
+    // Luồng QUÉT MÃ QR dùng chung (giống màn Lịch sử quét QR): mở camera → xử lý kết quả theo loại.
+    val qrFlow = rememberQrScanFlowState()
+
     // ---- SIM: phạm vi TOÀN APP (Cài đặt) + lọc nhanh CỤC BỘ ----
     // Phạm vi SIM toàn app: khi bật một SIM cụ thể, dữ liệu ĐÃ được lọc TẠI GỐC (repo) nên danh sách chỉ còn
     // SIM đó → thanh lọc cục bộ nhường chỗ cho tab TRẠNG THÁI "Đang xem SIM X" và filter cục bộ TẮT (tránh
@@ -477,6 +482,7 @@ fun CallListScreen(
                         )
                     }.onFailure { CallActions.toast(context, s.callList.voiceUnsupported) }
                 },
+                onScanQr = { qrFlow.scan() },
                 onContacts = onOpenContacts,
                 onSettings = onOpenSettings
             )
@@ -703,6 +709,9 @@ fun CallListScreen(
                 onDismiss = { showDateSheet = false }
             )
         }
+
+        // Luồng quét QR (camera phủ full-bleed + sheet xử lý kết quả) — mở bằng nút QR ở thanh trên.
+        QrScanFlow(state = qrFlow)
     }
 }
 
@@ -728,7 +737,7 @@ private fun leadingMissedRun(calls: List<CallEntry>): Int {
     return if (n >= 2) n else 0
 }
 
-private fun buildRows(
+internal fun buildRows(
     entries: List<CallEntry>,
     query: String,
     typeFilter: TypeFilter,
@@ -819,6 +828,7 @@ private fun TopBar(
     onFocusChanged: (Boolean) -> Unit,
     onImeAction: () -> Unit,
     onVoice: () -> Unit,
+    onScanQr: () -> Unit,
     onContacts: () -> Unit,
     onSettings: () -> Unit
 ) {
@@ -876,8 +886,15 @@ private fun TopBar(
                 text = s.callList.title,
                 style = MaterialTheme.typography.headlineSmall,
                 color = TextPrimary,
-                modifier = Modifier.weight(1f)
+                // Tiêu đề 1 dòng; khi thêm nút QR làm bề ngang không đủ hiển thị đủ chữ thì CHẠY vòng (phải→trái)
+                // liên tục thay vì bị cắt cụt. Đủ chỗ thì đứng yên như thường.
+                maxLines = 1,
+                softWrap = false,
+                modifier = Modifier
+                    .weight(1f)
+                    .basicMarquee(iterations = Int.MAX_VALUE)
             )
+            RoundIconButton(Icons.Rounded.QrCodeScanner, s.qr.scan, TextSecondary, onScanQr)
             RoundIconButton(Icons.Rounded.Contacts, s.common.contacts, TextSecondary, onContacts)
             RoundIconButton(Icons.Rounded.Search, s.common.search, TextSecondary, onOpenSearch)
             RoundIconButton(Icons.Rounded.Settings, s.common.settings, TextSecondary, onSettings)
@@ -972,7 +989,7 @@ private fun typeFilterLabel(f: TypeFilter): String = with(appStrings().callList)
  * thì tô xanh nhạt (chip chọn); mặc định thì nền xám.
  */
 @Composable
-private fun TypeFilterButton(current: TypeFilter, onClick: () -> Unit, modifier: Modifier = Modifier) {
+internal fun TypeFilterButton(current: TypeFilter, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val active = current != TypeFilter.ALL
     val bg = if (active) ChipSelectedBg else ChipBg
     val fg = if (active) ChipSelectedText else ChipText
@@ -1081,7 +1098,7 @@ private fun SimScopeStatusTab(label: String) {
  * nền xám nhạt + DẤU TICK màu xám; chọn xong tự đóng.
  */
 @Composable
-private fun TypeFilterSheet(
+internal fun TypeFilterSheet(
     selected: TypeFilter,
     onSelect: (TypeFilter) -> Unit,
     onDismiss: () -> Unit
@@ -1108,37 +1125,6 @@ private fun typeFilterIcon(f: TypeFilter): ImageVector = when (f) {
     TypeFilter.MISSED -> Icons.AutoMirrored.Rounded.CallMissed
     TypeFilter.OUTGOING -> Icons.AutoMirrored.Rounded.CallMade
     TypeFilter.INCOMING -> Icons.AutoMirrored.Rounded.CallReceived
-}
-
-/**
- * Một dòng chọn trong bottom sheet lọc — tone XÁM–TRẮNG: icon XÁM trong nền tròn xám nhạt + nhãn;
- * đang chọn → nền xám nhạt + chữ đậm + DẤU TICK màu xám (không dùng icon/màu nhấn).
- */
-@Composable
-private fun FilterOptionRow(icon: ImageVector, label: String, selected: Boolean, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .background(if (selected) FieldSurface else Color.Transparent)
-            .padding(horizontal = 20.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(modifier = Modifier.size(38.dp).clip(CircleShape).background(AccentGrayBg), contentAlignment = Alignment.Center) {
-            Icon(icon, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(20.dp))
-        }
-        Spacer(Modifier.width(14.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            color = TextPrimary,
-            modifier = Modifier.weight(1f)
-        )
-        if (selected) {
-            Icon(Icons.Rounded.Check, contentDescription = appStrings().callList.selected, tint = TextSecondary, modifier = Modifier.size(22.dp))
-        }
-    }
 }
 
 @Composable
@@ -1276,19 +1262,23 @@ private fun IconChip(text: String, icon: ImageVector, selected: Boolean, onClick
  *
  * @param initialEpochDay ngày đang lọc (epoch-day) để mở lại đúng chỗ; 0 = chưa chọn → mặc định HÔM NAY.
  * @param isActive đang lọc theo ngày cụ thể chưa (để hiện nút "Bỏ lọc theo ngày").
+ * @param minimumDate biên ngày cũ nhất tuỳ chọn; null giữ hành vi 3 tháng của bộ lọc cuộc gọi.
+ * @param rangeNote ghi chú giới hạn tuỳ chọn để màn tái sử dụng lịch có thể mô tả đúng phạm vi của mình.
  */
 @Composable
-private fun DayFilterSheet(
+internal fun DayFilterSheet(
     initialEpochDay: Long,
     isActive: Boolean,
     onApply: (Long) -> Unit,
     onClear: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    minimumDate: LocalDate? = null,
+    rangeNote: String? = null,
 ) {
     val cl = appStrings().callList
     val zone = remember { ZoneId.systemDefault() }
     val today = remember { LocalDate.now(zone) }
-    val minDate = remember { today.minusMonths(3) }   // biên DƯỚI: 3 tháng gần nhất
+    val minDate = remember(today, minimumDate) { minimumDate?.coerceAtMost(today) ?: today.minusMonths(3) }
     val maxDate = today                                // biên TRÊN: hôm nay (ẩn tương lai)
     val minMonth = remember { YearMonth.from(minDate) }
     val maxMonth = remember { YearMonth.from(today) }
@@ -1390,7 +1380,7 @@ private fun DayFilterSheet(
         )
         Spacer(Modifier.height(2.dp))
         Text(
-            text = cl.dateRangeNote,
+            text = rangeNote ?: cl.dateRangeNote,
             style = MaterialTheme.typography.bodySmall,
             color = TextSecondary,
             textAlign = TextAlign.Center,
@@ -1515,4 +1505,3 @@ private fun Context.findActivity(): Activity? {
     }
     return null
 }
-

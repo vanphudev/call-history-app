@@ -33,6 +33,9 @@ object Carrier {
         // Bổ sung đầu số/nhà mạng mới ở đây, ví dụ: "Tên mạng" to listOf("0xx", ...)
     )
 
+    /** Danh sách nhà mạng mà app có dữ liệu nhận diện; dùng chung cho bộ lọc/chặn theo nhà mạng. */
+    val names: List<String> = table.map { it.first }
+
     // Phẳng hoá thành (đầu số -> nhà mạng), ưu tiên đầu số DÀI hơn khi khớp (4 số trước 3 số).
     private val byPrefix: List<Pair<String, String>> = table
         .flatMap { (name, prefixes) -> prefixes.map { it to name } }

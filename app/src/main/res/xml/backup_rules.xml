@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Runtime-only blocker state must never be restored on another device. Durable settings
+         remain beside the Room rules so Android cannot create a partial blocker restore. -->
+    <exclude domain="sharedpref" path="call_block_runtime_state.xml" />
+    <exclude domain="sharedpref" path="call_block_runtime_state.xml.bak" />
+    <exclude domain="sharedpref" path="call_block_repeat_unknown_attempts.xml" />
+    <exclude domain="sharedpref" path="call_block_repeat_unknown_attempts.xml.bak" />
+    <exclude domain="sharedpref" path="call_block_repeat_unknown_guard_attempts.xml" />
+    <exclude domain="sharedpref" path="call_block_repeat_unknown_guard_attempts.xml.bak" />
+</full-backup-content>

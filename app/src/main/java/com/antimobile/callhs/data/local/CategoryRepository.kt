@@ -1,6 +1,11 @@
 package com.antimobile.callhs.data.local
 
 import android.content.Context
+import androidx.room.withTransaction
+import com.antimobile.callhs.data.backup.BackupCategory
+import com.antimobile.callhs.data.backup.BackupMember
+import com.antimobile.callhs.data.backup.MergeMode
+import com.antimobile.callhs.data.backup.SectionResult
 import com.antimobile.callhs.util.PhoneKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -12,7 +17,8 @@ import kotlinx.coroutines.flow.map
  */
 class CategoryRepository(context: Context) {
 
-    private val dao = AppDatabase.get(context).categoryDao()
+    private val db = AppDatabase.get(context)
+    private val dao = db.categoryDao()
 
     // --- Reactive reads ---
 
@@ -138,6 +144,147 @@ class CategoryRepository(context: Context) {
     /** Gỡ số khỏi nhóm. Nhận số ở BẤT KỲ dạng nào ([number] thô hoặc khoá) — repo tự chuẩn hoá về khoá, nên
      *  caller không thể vô tình truyền số chưa chuẩn hoá làm xoá hụt (PhoneKey.of của một khoá = chính nó). */
     suspend fun removeMember(categoryId: Long, number: String) = dao.deleteMember(categoryId, PhoneKey.of(number))
+
+    // --- Sao lưu & khôi phục ---
+
+    /** Xuất TOÀN BỘ nhóm (kể cả mặc định) kèm thành viên cho bản sao lưu. */
+    suspend fun exportForBackup(): List<BackupCategory> {
+        val membersByCat = dao.getAllMembers().groupBy { it.categoryId }
+        return dao.getCategories().map { c ->
+            BackupCategory(
+                name = c.name,
+                description = c.description,
+                iconKey = c.iconKey,
+                colorArgb = c.colorArgb,
+                builtInKey = c.builtInKey,
+                sortOrder = c.sortOrder,
+                createdAt = c.createdAt,
+                members = (membersByCat[c.id] ?: emptyList()).map {
+                    BackupMember(it.rawNumber, it.phoneKey, it.addedAt)
+                },
+            )
+        }
+    }
+
+    /**
+     * KHÔI PHỤC nhóm phân loại từ bản sao lưu theo [mode].
+     *
+     * Ghép nhóm: nhóm MẶC ĐỊNH khớp theo [CategoryEntity.builtInKey] (luôn tồn tại sau [ensureSeeded]);
+     * nhóm NGƯỜI DÙNG khớp theo TÊN (cắt khoảng trắng, không phân biệt hoa/thường). Thành viên so trùng
+     * theo [PhoneKey] trong cùng nhóm (unique index chống trùng).
+     *
+     *  - [MergeMode.REPLACE]: xoá sạch nhóm người dùng + dọn thành viên nhóm mặc định, rồi dựng lại từ bản sao lưu.
+     *  - [MergeMode.ADD]: giữ nguyên cái đang có; chỉ thêm nhóm/thành viên CHƯA có.
+     *  - [MergeMode.UPDATE]: như [ADD] nhưng còn cập nhật giao diện (icon/màu/mô tả) của nhóm khớp tên.
+     *
+     * Tôn trọng giới hạn [MAX_CATEGORIES] / [MAX_MEMBERS]; phần vượt bị bỏ và đánh dấu [SectionResult.truncated].
+     * [added] = số nhóm mới + số thành viên mới; [updated] = số nhóm được cập nhật giao diện.
+     *
+     * Toàn bộ chạy trong MỘT giao dịch ([withTransaction]): với REPLACE (xoá sạch rồi dựng lại), nếu giữa chừng
+     * lỗi hoặc coroutine bị huỷ (app bị kill), giao dịch được ROLL BACK → dữ liệu cũ còn nguyên, không mất trắng.
+     */
+    suspend fun restore(incoming: List<BackupCategory>, mode: MergeMode): SectionResult = db.withTransaction {
+        ensureSeeded() // đảm bảo 2 nhóm mặc định tồn tại trước khi ghép
+
+        var added = 0
+        var updated = 0
+        var skipped = 0
+        var truncated = false
+
+        if (mode == MergeMode.REPLACE) {
+            dao.deleteAllUserCategories() // thành viên tự CASCADE
+            dao.getCategories().filter { it.builtInKey != null }.forEach { dao.deleteMembersOf(it.id) }
+        }
+
+        // Bảng tra id hiện có, cập nhật dần khi tạo nhóm mới (để nhóm trùng tên trong bản sao lưu gộp vào một nhóm).
+        val existing = dao.getCategories()
+        val builtInIdByKey = existing.filter { it.builtInKey != null }.associate { it.builtInKey!! to it.id }
+        val userIdByName = HashMap<String, Long>()
+        existing.filter { it.builtInKey == null }.forEach { userIdByName[it.name.trim().lowercase()] = it.id }
+
+        for (bc in incoming) {
+            val targetId: Long? = if (bc.builtInKey != null) {
+                val id = builtInIdByKey[bc.builtInKey]
+                // Nhóm mặc định KHÔNG xoá được → với REPLACE/UPDATE, áp lại giao diện (icon/màu/mô tả) theo bản
+                // sao lưu để "khôi phục về đúng trạng thái đã lưu". Tên nhóm mặc định lấy từ i18n nên bỏ qua.
+                if (id != null && (mode == MergeMode.UPDATE || mode == MergeMode.REPLACE)) {
+                    dao.getCategory(id)?.let {
+                        dao.updateCategory(it.copy(description = bc.description, iconKey = bc.iconKey, colorArgb = bc.colorArgb))
+                        updated++
+                    }
+                }
+                id
+            } else {
+                val nameKey = bc.name.trim().lowercase()
+                val existingId = userIdByName[nameKey]
+                when {
+                    existingId != null -> {
+                        if (mode == MergeMode.UPDATE) {
+                            dao.getCategory(existingId)?.let {
+                                dao.updateCategory(it.copy(name = bc.name.trim(), description = bc.description, iconKey = bc.iconKey, colorArgb = bc.colorArgb))
+                                updated++
+                            }
+                        }
+                        existingId
+                    }
+                    dao.categoryCount() >= MAX_CATEGORIES -> {
+                        truncated = true; null
+                    }
+                    else -> {
+                        val maxSort = dao.getCategories().maxOfOrNull { it.sortOrder } ?: 1
+                        val newId = dao.insertCategory(
+                            CategoryEntity(
+                                name = bc.name.trim(),
+                                description = bc.description,
+                                iconKey = bc.iconKey,
+                                colorArgb = bc.colorArgb,
+                                builtInKey = null,
+                                sortOrder = maxSort + 1,
+                                createdAt = if (bc.createdAt > 0) bc.createdAt else System.currentTimeMillis(),
+                            )
+                        )
+                        userIdByName[nameKey] = newId
+                        added++
+                        newId
+                    }
+                }
+            }
+
+            if (targetId == null) {
+                skipped += bc.members.size
+                continue
+            }
+
+            for (m in bc.members) {
+                // Tính khoá CHUẨN từ số gốc (không tin khoá đã lưu — bản sao lưu cũ có thể theo thuật toán khác);
+                // nhờ vậy so trùng & chèn dùng đúng khoá hiện hành, renormalize phía dưới không phải xoá lại dòng
+                // vừa chèn (tránh đếm "added" ảo).
+                val key = PhoneKey.of(m.rawNumber).ifEmpty { m.phoneKey }
+                if (key.isEmpty()) {
+                    skipped++; continue
+                }
+                if (dao.memberExists(targetId, key) > 0) {
+                    skipped++; continue
+                }
+                if (dao.memberCount(targetId) >= MAX_MEMBERS) {
+                    truncated = true; skipped++; continue
+                }
+                dao.insertMember(
+                    CategoryMemberEntity(
+                        categoryId = targetId,
+                        rawNumber = m.rawNumber,
+                        phoneKey = key,
+                        addedAt = if (m.addedAt > 0) m.addedAt else System.currentTimeMillis(),
+                    )
+                )
+                added++
+            }
+        }
+
+        // Chuẩn hoá lại khoá thành viên theo thuật toán PhoneKey hiện hành (idempotent) — khớp seed/ensure.
+        renormalizeMemberKeys()
+        SectionResult(added = added, updated = updated, skipped = skipped, truncated = truncated)
+    }
 
     private fun CategoryEntity.toModel(memberCount: Int) =
         Category(id, name, description, iconKey, colorArgb, builtInKey, memberCount)

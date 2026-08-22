@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -46,6 +47,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.antimobile.callhs.data.model.CallEntry
+import com.antimobile.callhs.i18n.appStrings
 import com.antimobile.callhs.ui.category.AvatarCategoryBadges
 import com.antimobile.callhs.ui.components.Avatar
 import com.antimobile.callhs.ui.components.CallTypeIcon
@@ -79,10 +81,12 @@ private const val FLASH_PEAK_ALPHA = 0.7f
 fun ListCallItem(
     entry: CallEntry,
     onOpen: () -> Unit,
-    onLongPress: (Rect) -> Unit,
+    onLongPress: ((Rect) -> Unit)? = null,
     activeInMenu: Boolean = false,
     missedStreak: Int = 0,
     flash: Boolean = false,
+    /** null = mũi tên mở chi tiết như bình thường; true/false = ô chọn cho picker nhiều số. */
+    selectionState: Boolean? = null,
     modifier: Modifier = Modifier
 ) {
     // Giữ toạ độ thẻ ngoài snapshot state (không recompose mỗi frame khi cuộn) — đọc lúc nhấn giữ.
@@ -101,14 +105,15 @@ fun ListCallItem(
             entry = entry,
             missedStreak = missedStreak,
             flash = flash,
+            selectionState = selectionState,
             onClick = onOpen,
             onLongClick = {
                 // Chốt khung thẻ hiện tại rồi báo lên màn để dựng menu.
                 val bounds = cardCoords.value?.takeIf { it.isAttached }?.boundsInWindow()
                 if (bounds != null) {
-                    onLongPress(bounds)
+                    onLongPress?.invoke(bounds)
                 }
-            }
+            }.takeIf { onLongPress != null }
         )
     }
 }
@@ -125,6 +130,7 @@ fun ListCallCard(
     modifier: Modifier = Modifier,
     missedStreak: Int = 0,
     flash: Boolean = false,
+    selectionState: Boolean? = null,
     onClick: (() -> Unit)? = null,
     onLongClick: (() -> Unit)? = null
 ) {
@@ -215,16 +221,35 @@ fun ListCallCard(
                     )
                 }
                 Spacer(Modifier.width(6.dp))
-                Box(
-                    modifier = Modifier.size(30.dp).clip(CircleShape).background(AccentGrayBg),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                        contentDescription = null,
-                        tint = AccentGray,
-                        modifier = Modifier.size(20.dp)
-                    )
+                if (selectionState == null) {
+                    Box(
+                        modifier = Modifier.size(30.dp).clip(CircleShape).background(AccentGrayBg),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = AccentGray,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(RoundedCornerShape(7.dp))
+                            .background(if (selectionState) Primary else AccentGrayBg),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (selectionState) {
+                            Icon(
+                                imageVector = Icons.Rounded.Check,
+                                contentDescription = appStrings().callList.selected,
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                    }
                 }
             }
         }

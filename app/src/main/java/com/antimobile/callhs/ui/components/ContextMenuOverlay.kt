@@ -10,16 +10,25 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -32,6 +41,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -39,6 +49,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import com.antimobile.callhs.ui.theme.CardSurface
@@ -61,6 +74,13 @@ data class ContextAction(
     val onClick: () -> Unit,
 )
 
+/** Hành động dạng chữ: hiển thị thành nút pill ở hàng riêng bên dưới hàng icon. */
+data class ContextTextAction(
+    val label: String,
+    val tint: Color,
+    val onClick: () -> Unit,
+)
+
 // Nền tối phủ toàn màn — đủ đậm để làm nổi item + hàng icon, vẫn thấy mờ danh sách phía sau.
 private val ScrimColor = Color(0f, 0f, 0f, 0.55f)
 
@@ -72,6 +92,8 @@ private val ACTION_SIZE = 48.dp        // đường kính nút tròn
 private val ACTION_GLYPH = 24.dp       // cỡ icon material bên trong nút
 private val ACTION_LOGO_GLYPH = 30.dp  // logo nhiều màu (vd Zalo) hiển thị to hơn 1 tí cho cân
 private val ACTION_GAP = 12.dp         // khoảng cách ĐỀU giữa các nút
+private val TEXT_ACTION_HEIGHT = 56.dp // đủ cho nhãn dài xuống tối đa hai dòng mà vẫn giữ dáng pill
+private val STACKED_TEXT_ACTION_WIDTH = 248.dp
 
 /**
  * Lớp phủ CONTEXT-MENU kiểu Zalo dùng CHUNG toàn dự án — thay cho cử chỉ vuốt-lộ-hành-động.
@@ -81,19 +103,23 @@ private val ACTION_GAP = 12.dp         // khoảng cách ĐỀU giữa các nút
  * (khung [bounds] tính từ `boundsInWindow()` lúc nhấn giữ); khi != null thì render overlay này ở gốc.
  *
  * Diễn hoạt: nền tối mờ dần vào; item được "nhấc" lên (bản sao [lifted] tại đúng vị trí cũ) và THU NHẸ lại;
- * hàng icon [actions] bung ra mượt cạnh item. Đóng thì mọi thứ chạy ngược rồi mới gọi [onClosed] gỡ overlay.
+ * các hàng hành động bung ra mượt cạnh item. Đóng thì mọi thứ chạy ngược rồi mới gọi [onClosed] gỡ overlay.
  *
  * Vị trí hàng icon tự tính để không bị che: canh PHẢI theo item, ưu tiên xổ DƯỚI, thiếu chỗ thì lật TRÊN,
  * luôn nằm trong vùng an toàn (chừa [topInsetPx]/[bottomInsetPx]).
  *
  * @param bounds khung THẺ gốc (toạ độ cửa sổ, px) — dùng để đặt bản sao [lifted] đúng chỗ & canh hàng icon.
  * @param actions danh sách hành động; bấm nút nào cũng tự ĐÓNG menu sau khi chạy [ContextAction.onClick].
+ * @param textActions hành động chữ dạng pill, nằm thành hàng riêng bên dưới [actions] và có bề rộng bằng nhau.
+ * @param stackTextActions xếp mỗi hành động chữ thành một hàng, canh phải và dùng bề mặt kính trong suốt.
  * @param lifted bản sao THẺ (vẽ y hệt item gốc) — được đo theo bề rộng của [bounds].
  */
 @Composable
 fun ContextMenuOverlay(
     bounds: Rect,
     actions: List<ContextAction>,
+    textActions: List<ContextTextAction> = emptyList(),
+    stackTextActions: Boolean = false,
     topInsetPx: Int,
     bottomInsetPx: Int,
     onClosed: () -> Unit,
@@ -175,7 +201,7 @@ fun ContextMenuOverlay(
                 ) {
                     lifted()
                 }
-                // [1] Hàng icon hành động, bung ra từ mép PHẢI gần item.
+                // [1] Hàng icon và (nếu có) hàng nút chữ bên dưới, bung ra từ mép PHẢI gần item.
                 Box(
                     modifier = Modifier.graphicsLayer {
                         alpha = appear
@@ -185,11 +211,60 @@ fun ContextMenuOverlay(
                         transformOrigin = TransformOrigin(1f, 0f)
                     }
                 ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(ACTION_GAP)) {
-                        actions.forEach { action ->
-                            // Chặn bấm nút hành động khi ĐANG đóng (nút đang mờ dần) để không lỡ chạy 2 lần
-                            // (vd gọi/sao chép) do một cú chạm lạc vào lúc chuyển cảnh.
-                            CircleAction(action) { if (!closing) { action.onClick(); requestClose() } }
+                    Column(
+                        horizontalAlignment = Alignment.End,
+                        verticalArrangement = Arrangement.spacedBy(ACTION_GAP),
+                    ) {
+                        Row(
+                            modifier = if (textActions.isNotEmpty() && !stackTextActions) {
+                                Modifier.fillMaxWidth()
+                            } else {
+                                Modifier
+                            },
+                            horizontalArrangement = if (textActions.isNotEmpty() && !stackTextActions) {
+                                Arrangement.SpaceEvenly
+                            } else {
+                                Arrangement.spacedBy(ACTION_GAP)
+                            },
+                        ) {
+                            actions.forEach { action ->
+                                // Chặn bấm nút hành động khi ĐANG đóng (nút đang mờ dần) để không lỡ chạy 2 lần
+                                // (vd gọi/sao chép) do một cú chạm lạc vào lúc chuyển cảnh.
+                                CircleAction(action) { if (!closing) { action.onClick(); requestClose() } }
+                            }
+                        }
+                        if (textActions.isNotEmpty()) {
+                            if (stackTextActions) {
+                                textActions.forEach { action ->
+                                    TextAction(
+                                        action = action,
+                                        modifier = Modifier.width(STACKED_TEXT_ACTION_WIDTH),
+                                        glass = true,
+                                    ) {
+                                        if (!closing) {
+                                            action.onClick()
+                                            requestClose()
+                                        }
+                                    }
+                                }
+                            } else {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(ACTION_GAP),
+                                ) {
+                                    textActions.forEach { action ->
+                                        TextAction(
+                                            action = action,
+                                            modifier = Modifier.weight(1f),
+                                        ) {
+                                            if (!closing) {
+                                                action.onClick()
+                                                requestClose()
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -258,5 +333,50 @@ private fun CircleAction(action: ContextAction, onClick: () -> Unit) {
             is ActionGlyph.Vector -> Icon(g.icon, contentDescription = action.desc, tint = g.tint, modifier = Modifier.size(ACTION_GLYPH))
             is ActionGlyph.Logo -> Image(painterResource(g.res), contentDescription = action.desc, modifier = Modifier.size(ACTION_LOGO_GLYPH))
         }
+    }
+}
+
+/** Nút chữ bo tròn hai đầu; các nút cùng hàng nhận cùng trọng số nên luôn canh và rộng đều nhau. */
+@Composable
+private fun TextAction(
+    action: ContextTextAction,
+    modifier: Modifier = Modifier,
+    glass: Boolean = false,
+    onClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(50)
+    val surface = if (glass) {
+        Modifier
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.22f),
+                        Color.White.copy(alpha = 0.10f),
+                    )
+                )
+            )
+            .border(1.dp, Color.White.copy(alpha = 0.30f), shape)
+    } else {
+        Modifier.background(CardSurface)
+    }
+    Box(
+        modifier = modifier
+            .height(TEXT_ACTION_HEIGHT)
+            .shadow(6.dp, shape)
+            .clip(shape)
+            .then(surface)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = action.label,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (glass) Color.White else action.tint,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }

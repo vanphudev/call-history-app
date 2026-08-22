@@ -5,6 +5,7 @@ import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -15,7 +16,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.lifecycleScope
+import com.antimobile.callhs.data.blocking.CallBlockRepository
 import com.antimobile.callhs.data.local.CategoryCatalog
+import com.antimobile.callhs.data.blocking.CallBlockNotifier
+import com.antimobile.callhs.data.blocking.CallBlockNotificationSettings
+import com.antimobile.callhs.data.blocking.CallBlockSettings
 import com.antimobile.callhs.ui.navigation.AppNav
 import com.antimobile.callhs.ui.permissions.PermissionGate
 import com.antimobile.callhs.i18n.LanguageSettings
@@ -26,6 +32,8 @@ import com.antimobile.callhs.util.AppMigrations
 import com.antimobile.callhs.util.DeviceInfo
 import com.antimobile.callhs.util.FontScaleSettings
 import com.antimobile.callhs.util.SimScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -58,6 +66,18 @@ class MainActivity : ComponentActivity() {
         LanguageSettings.init(applicationContext)
         // Xác định CHẾ ĐỘ Sáng/Tối (đã lưu, hoặc theo máy nếu SYSTEM) TRƯỚC setContent → khung hình đầu đúng chế độ.
         ThemeSettings.init(applicationContext)
+        // Nạp cài đặt bộ chặn và tạo notification channel một lần; service vẫn đọc prefs trực tiếp
+        // nếu Android khởi chạy process chỉ để screening khi Activity chưa từng mở.
+        CallBlockSettings.init(applicationContext)
+        CallBlockNotificationSettings.init(applicationContext)
+        CallBlockNotifier.ensureChannel(applicationContext)
+        // Upgrade bootstrap: build the durable screening snapshot in the background while the app
+        // is open, so the next cold incoming call does not need to open/wait for Room.
+        val appContext = applicationContext
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { CallBlockRepository(appContext).warmScreeningRuleSnapshot() }
+                .onFailure { error -> Log.e("CallBlockWarmup", "Unable to warm screening rules", error) }
+        }
         // Nạp PHẠM VI SIM toàn app đã lưu TRƯỚC setContent → nhật ký/thống kê khung hình đầu đã đúng SIM đang xem.
         SimScope.init(applicationContext)
         // Mở nguồn phản ứng NHÓM PHÂN LOẠI (seed 2 nhóm mặc định + collector Room) → badge/chip cập nhật toàn app.

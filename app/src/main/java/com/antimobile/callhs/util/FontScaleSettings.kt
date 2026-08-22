@@ -72,13 +72,17 @@ object FontScaleSettings {
     val scale: Float
         get() = state.floatValue
 
-    /** Ghi lựa chọn mới: cập nhật state (app đổi NGAY) + lưu bền vào prefs. Giá trị được kẹp trong [MIN]..[MAX]. */
+    /**
+     * Ghi lựa chọn mới: cập nhật state (app đổi NGAY) + lưu bền vào prefs. Giá trị được kẹp trong [MIN]..[MAX].
+     * Giá trị KHÔNG hữu hạn (NaN/∞ — vd từ file sao lưu hỏng) được thay bằng [DEFAULT] vì `coerceIn` KHÔNG loại
+     * được NaN (sẽ lọt qua và làm mọi cỡ chữ thành NaN → chữ vỡ toàn app).
+     */
     fun set(context: Context, scale: Float) {
-        val v = scale.coerceIn(MIN, MAX)
+        val v = if (scale.isFinite()) scale.coerceIn(MIN, MAX) else DEFAULT
         state.floatValue = v
         prefs(context).edit().putFloat(KEY_FONT_SCALE, v).apply()
     }
 
     private fun read(context: Context): Float =
-        prefs(context).getFloat(KEY_FONT_SCALE, DEFAULT).coerceIn(MIN, MAX)
+        prefs(context).getFloat(KEY_FONT_SCALE, DEFAULT).let { if (it.isFinite()) it.coerceIn(MIN, MAX) else DEFAULT }
 }

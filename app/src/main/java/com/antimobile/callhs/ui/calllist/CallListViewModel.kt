@@ -37,6 +37,9 @@ class CallListViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var loaded by mutableStateOf(false)
         private set
+    /** Tăng sau mỗi lượt nạp hoàn tất; picker dùng để không hiển thị dữ liệu cũ trong lúc đổi SimScope. */
+    var completedLoadGeneration by mutableStateOf(0)
+        private set
 
     private var job: Job? = null
     private var observing = false
@@ -83,6 +86,7 @@ class CallListViewModel(app: Application) : AndroidViewModel(app) {
                 if (isActive) {
                     loading = false
                     refreshing = false
+                    completedLoadGeneration++
                 }
             }
         }

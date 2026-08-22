@@ -4,21 +4,32 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import com.antimobile.callhs.data.blocking.CallBlockDao
+import com.antimobile.callhs.data.blocking.CallBlockHistoryEntity
+import com.antimobile.callhs.data.blocking.CallBlockNumberEntryEntity
+import com.antimobile.callhs.data.blocking.CallBlockRuleEntity
 
 /**
- * Room DB cục bộ (KHÔNG mã hoá) cho dữ liệu người dùng tự tạo — hiện chỉ có nhóm phân loại số điện thoại.
- * Nhật ký cuộc gọi & danh bạ VẪN đọc read-only từ hệ thống, không đưa vào DB này.
+ * Room DB cục bộ cho toàn bộ dữ liệu do CallHS tự quản. Call Log và Danh bạ hệ thống vẫn chỉ được
+ * đọc trực tiếp, không sao chép vào database này.
  *
- * version 1, exportSchema=true (schema xuất ra app/schemas → về sau đổi version phải viết Migration
- * thật, KHÔNG fallbackToDestructiveMigration để không mất dữ liệu người dùng khi cập nhật app).
+ * Đây là schema phát triển đầu tiên của ứng dụng. Trước khi public, thay đổi cấu trúc được cập nhật
+ * trực tiếp vào version 1 và dữ liệu cài thử được tạo mới; chưa duy trì migration lịch sử.
  */
 @Database(
-    entities = [CategoryEntity::class, CategoryMemberEntity::class],
+    entities = [
+        CategoryEntity::class,
+        CategoryMemberEntity::class,
+        CallBlockRuleEntity::class,
+        CallBlockNumberEntryEntity::class,
+        CallBlockHistoryEntity::class,
+    ],
     version = 1,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun categoryDao(): CategoryDao
+    abstract fun callBlockDao(): CallBlockDao
 
     companion object {
         @Volatile
@@ -30,7 +41,9 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "callhs.db",
-                ).build().also { instance = it }
+                )
+                    .build()
+                    .also { instance = it }
             }
     }
 }

@@ -1,5 +1,10 @@
 package com.antimobile.callhs.i18n
 
+import com.antimobile.callhs.data.blocking.ContactRuleCodec
+import com.antimobile.callhs.data.blocking.CallHistoryRuleCodec
+import com.antimobile.callhs.data.blocking.BrandNameRuleCodec
+import com.antimobile.callhs.data.blocking.GeographicBlockOption
+import com.antimobile.callhs.data.blocking.SpecialCallCondition
 import java.time.DayOfWeek
 
 /** Bảng chuỗi TIẾNG ANH — bản dịch song song với [ViStrings]. */
@@ -37,6 +42,8 @@ object EnStrings : AppStrings {
     override val theme: ThemeStrings = Theme
     override val category: CategoryStrings = Category
     override val donate: DonateStrings = Donate
+    override val backup: BackupStrings = Backup
+    override val blocker: CallBlockStrings = Blocker
 
     private object Common : CommonStrings {
         override val back = "Back"
@@ -133,6 +140,7 @@ object EnStrings : AppStrings {
         override val voiceUnsupported = "Voice search isn't supported on this device"
         override val dialpad = "Dialpad"
         override val scrollToTop = "Scroll to top"
+        override val scrollToBottom = "Scroll to bottom"
         override val chooseFilter = "Choose filter"
         override val selected = "Selected"
 
@@ -811,12 +819,13 @@ object EnStrings : AppStrings {
         override val simBullet2 = "Determine on/off-net to estimate call charges"
         override val simBullet3 = "Used only for on-device calculation, never sent"
         override val contactsStep = "Contacts"
-        override val contactsHeadline = "Show contact names"
+        override val contactsHeadline = "Screen calls from saved contacts"
         override val contactsDesc =
-            "CallHS reads your contacts to replace phone numbers with saved NAMES and photos, so you instantly " +
-                "recognize who called. The app only reads — it never adds / edits / deletes contacts."
-        override val contactsBullet1 = "Show contact name & photo instead of unknown numbers"
-        override val contactsBullet2 = "Easily recognize who called in the list"
+            "Android only sends calls from saved numbers to CallHS while Contacts permission remains granted. " +
+                "CallHS uses it to apply every blocking rule and show names and photos; it only reads contacts " +
+                "and never edits or uploads them."
+        override val contactsBullet1 = "Apply blocking rules to saved contact numbers"
+        override val contactsBullet2 = "Show names and photos in call history"
         override val contactsBullet3 = "Read-only contacts — never edits or sends anything"
         override fun stepIndicator(current: Int, total: Int, title: String) = "Step $current/$total · $title"
         override val deniedMessage = "You've denied this permission. Please enable it manually in Settings to continue."
@@ -990,6 +999,692 @@ object EnStrings : AppStrings {
         override val footerMessage =
             "This is a voluntary contribution to the developer — not a required fee, and it doesn't unlock any features. CallHS stays free for everyone. Thank you so much for your support."
         override val thankYou = "Thank you so much ❤️"
+    }
+
+    private object Blocker : CallBlockStrings {
+        override val settingsSection = "Call blocking"
+        override val settingsTitle = "Call & spam blocking"
+        override val settingsSubtitle = "Blocking rules, history and notifications"
+        override val settingsOpen = "Open call blocking"
+
+        override val screenTitle = "Call blocking"
+        override val settingsScreenTitle = "Call blocking settings"
+        override val openSettings = "Open call blocking settings"
+        override val featureDetailsAction = "View feature details"
+        override val featureInfoSheetTitle = "Call-blocking feature information"
+        override val featureInfoAvailabilityNote =
+            "Applies only to incoming calls while CallHS is the active call-screening app and Call protection is on and not paused."
+        override val roleTitle = "Enable call blocking"
+        override val roleBody =
+            "Android needs you to choose CallHS as the call-screening app. CallHS only screens incoming calls; it does not replace your phone's default dialer."
+        override val roleAction = "Choose CallHS for spam blocking"
+        override val roleUnavailableTitle = "Not supported on this device"
+        override val roleUnavailableBody = "This device does not provide Android's call-screening role."
+        override val roleActive = "CallHS is the current call-screening app"
+
+        override val protectionTitle = "Call protection"
+        override val protectionSubtitle =
+            "While paused, every call is allowed through; your rules and protection settings stay saved and automatically resume when the timer ends."
+        override val protectionOn = "Call screening is active"
+        override val protectionOff = "Protection is off"
+        override val enableProtectionAction = "Turn on call blocking"
+        override val disableProtectionAction = "Turn off call blocking"
+        override val pauseTimerTitle = "Pause timer"
+        override val pauseTimerOff = "Off"
+        override val pauseTimer10Minutes = "10m"
+        override val pauseTimer30Minutes = "30m"
+        override val pauseTimer1Hour = "1h"
+        override val pauseTimerOffExplanation =
+            "Off only cancels the timer; protection stays active while the main switch is on."
+        override val pauseActive = "Paused by timer"
+        override fun pausePeriod(from: String, to: String) = "$from → $to"
+        override fun pauseRemaining(countdown: String) = "$countdown remaining"
+        override val pauseUnavailableWhileOff = "Turn on protection to use the pause timer."
+        override val dailyScheduleTitle = "Block & pause schedule"
+        override fun dailyScheduleCount(count: Int, max: Int) = "$count/$max time windows"
+        override val dailyScheduleDescription =
+            "Repeats on selected days. Block windows turn protection on; Pause windows allow every call through."
+        override val dailyScheduleBaseState = "Outside these windows, the Call protection switch applies."
+        override val dailyScheduleEmpty = "No time windows yet. Choose a preset or set custom times."
+        override val dailyScheduleAdd = "Add time window"
+        override val dailyScheduleLimitReached = "The four-window limit has been reached."
+        override val dailyScheduleBlock = "Block"
+        override val dailySchedulePause = "Pause"
+        override val dailyScheduleBlockActive = "Blocking by schedule"
+        override val dailySchedulePauseActive = "Paused by schedule"
+        override val dailyScheduleTimelineDescription = "24-hour block and pause schedule chart"
+        override val dailyScheduleEditorAddTitle = "Add daily schedule"
+        override val dailyScheduleEditorEditTitle = "Edit daily schedule"
+        override val dailyScheduleActionTitle = "During this time"
+        override val dailySchedulePresetTitle = "Quick presets"
+        override val dailyScheduleMorning = "Morning"
+        override val dailyScheduleAfternoon = "Afternoon"
+        override val dailyScheduleEvening = "Evening"
+        override val dailyScheduleNight = "Night"
+        override val dailyScheduleCustom = "Custom time"
+        override val dailyScheduleDaysTitle = "Active days"
+        override val dailyScheduleEveryDay = "Every day"
+        override fun dailyScheduleWeekdayShort(day: java.time.DayOfWeek) = when (day) {
+            java.time.DayOfWeek.MONDAY -> "Mon"
+            java.time.DayOfWeek.TUESDAY -> "Tue"
+            java.time.DayOfWeek.WEDNESDAY -> "Wed"
+            java.time.DayOfWeek.THURSDAY -> "Thu"
+            java.time.DayOfWeek.FRIDAY -> "Fri"
+            java.time.DayOfWeek.SATURDAY -> "Sat"
+            java.time.DayOfWeek.SUNDAY -> "Sun"
+        }
+        override fun dailyScheduleToday(day: String) = "Today · $day"
+        override val dailyScheduleEnabled = "Enabled"
+        override val dailyScheduleDisabled = "Disabled"
+        override val dailyScheduleStartTime = "Starts"
+        override val dailyScheduleEndTime = "Ends"
+        override val dailyScheduleTimeConfirm = "Done"
+        override val dailyScheduleNextDay = "next day"
+        override val dailyScheduleSave = "Save time window"
+        override val dailyScheduleDelete = "Delete time window"
+        override val dailyScheduleOverlapTitle = "Schedule overlap"
+        override val dailyScheduleOverlapConfirm = "Got it"
+        override fun dailyScheduleOverlapError(from: String, to: String) =
+            "This overlaps the $from–$to schedule. Choose different times."
+        override val dailyScheduleInvalidError = "Start and end times must be different."
+        override val dailyScheduleNoDayError = "Select at least one active day."
+        override val dailyScheduleStorageError = "The schedule could not be saved. Please try again."
+        override val protectionOffBannerBody =
+            "Your rules and settings are still saved, but calls are not being screened. Tap the red button below to turn protection back on."
+        override val protectionPausedBannerBody =
+            "Every call is currently allowed through; protection features will automatically resume when the timer ends."
+        override val repeatCallerExceptionTitle = "Allow repeated unknown callers"
+        override fun repeatCallerExceptionSubtitle(threshold: Int, minutes: Int) =
+            "This feature only applies when CallHS confirms the number is outside Contacts and the call matches no rule. Attempts before threshold $threshold use the selected Handling method: the two Block modes record blocked-call history and notify according to settings; Silence only mutes the ringtone and creates no blocked-call record; Allow passes every call and does not count attempts. Once there are $threshold attempts in the most recent $minutes-minute window, the current and later calls are allowed while that rolling window remains at the threshold. If the number already matches a rule, the repeat feature is not evaluated and never overrides the result. The saved-contacts exception still applies separately to broad rules. Only while evaluating this repeated-caller feature, if CallHS cannot verify Contacts, it allows the call to avoid a false block."
+        override val repeatCallerExceptionOff = "Repeated unknown-caller feature is off"
+        override fun repeatCallerExceptionOn(threshold: Int, minutes: Int) =
+            "Before attempt $threshold: use selected method · From attempt $threshold: allow within $minutes min"
+        override val repeatCallerThresholdTitle = "Allow-from threshold"
+        override fun repeatCallerThresholdOption(threshold: Int) = "Allow from attempt $threshold"
+        override val repeatCallerWindowTitle = "Call-counting window"
+        override fun repeatCallerWindowValue(minutes: Int) =
+            if (minutes == 1) "1 minute" else "$minutes minutes"
+        override val repeatCallerWindowSheetTitle = "Repeated unknown-call window"
+        override fun repeatCallerWindowHint(minMinutes: Int, maxMinutes: Int) =
+            "Enter a $minMinutes–$maxMinutes minute window"
+        override fun repeatCallerWindowInvalid(minMinutes: Int, maxMinutes: Int) =
+            "Enter a window from $minMinutes to $maxMinutes minutes."
+        override val repeatCallerApply = "Apply"
+        override val blockMethodTitle = "Handling method"
+        override val blockMethodSubtitle =
+            "Choose what CallHS does when a call matches a rule or is held below the unknown-caller gate threshold."
+        override val chooseBlockMethod = "Choose handling method"
+        override val methodBlockAndReject = "Block and reject"
+        override val methodBlockAndRejectDesc = "Prevent the call from reaching you and send a rejection response to the caller."
+        override val methodBlockWithoutReject = "Block without rejecting"
+        override val methodBlockWithoutRejectDesc = "Prevent the call from reaching you without actively sending a rejection response."
+        override val methodSilenceOnly = "Silence only"
+        override val methodSilenceOnlyDesc = "Keep the incoming call visible but silence the device's ringtone."
+        override val methodAllow = "Allow"
+        override val methodAllowDesc =
+            "Allow every call through. Rules stay saved but are not applied, and repeated unknown-caller attempts are not counted until you select another method."
+        override val notificationTitleSetting = "Blocked-call notifications"
+        override val notificationSubtitle = "Turn the distinct sound alert on or off for every blocked call."
+        override val notificationPermissionNeeded = "Allow Android notifications to receive blocked-call alerts."
+        override val notificationPermissionAction = "Allow notifications"
+        override val notificationChannelNeedsAttention =
+            "The alert channel is disabled, muted or not set to Urgent for heads-up alerts."
+        override val notificationChannelSettingsAction = "Open channel settings"
+        override val notificationOff = "Notifications off"
+        override val notificationEvery = "Notify on every block"
+
+        override val alwaysAllowTitle = "Allow list"
+        override val alwaysAllowSubtitle = "Numbers in this list are always allowed through first."
+        override val alwaysAllowDetails =
+            "Add a number manually or pick it from Contacts, call history, or Categories. When a number in this list calls, CallHS allows it immediately.\n\n" +
+                "The Allow list is always checked first. Picking a source only copies the number and does not follow later contact changes."
+        override val blockedNumbersTitle = "Block list"
+        override val blockedNumbersSubtitle = "Specific numbers that will be blocked when they call."
+        override val blockedNumbersDetails =
+            "Add a number manually or pick it from Contacts, call history, or Categories. When a number in this list calls, CallHS uses your selected blocking method.\n\n" +
+                "The Block list is checked after the Allow list and before every other choice."
+        override val groupBlockingTitle = "Handle by Contacts"
+        override val groupBlockingSubtitle = "Choose how to handle saved and unsaved numbers."
+        override val groupBlockingDetails =
+            "Choose how CallHS handles numbers saved in Contacts and numbers outside Contacts. Each choice clearly says whether the call is allowed, blocked, or continues to Advanced rules.\n\n" +
+                "The Allow list and Block list are always checked first. Repeat handling only runs when no rule matches."
+        override val advancedRulesTitle = "Advanced rules"
+        override val advancedRulesSubtitle = "Spam-risk filter, number patterns, carriers, regions and special types."
+        override val advancedRulesDetails =
+            "Use the spam-risk signals filter or create conditions for prefixes, suffixes, contained digits, length, carrier, region, or call type. Each rule can apply to saved numbers, unsaved numbers, or everyone.\n\n" +
+                "CallHS checks enabled rules from top to bottom and applies the first matching rule."
+        override fun savedNumberCount(count: Int) = if (count == 1) "1 number" else "$count numbers"
+        override val manageSection = "Manage call blocking"
+        override val allowlistScreenTitle = "Allow list"
+        override val blocklistScreenTitle = "Block list"
+        override val allowlistEmpty = "The Allow list is empty."
+        override val blocklistEmpty = "The Block list is empty."
+        override val addNumber = "Add number"
+        override val addNumberSourceTitle = "Choose number source"
+        override val sourceEnterManually = "Enter manually"
+        override val sourceFromContacts = "Choose from Contacts"
+        override val sourceFromCallHistory = "Choose from call history"
+        override val sourceFromCategories = "Choose from Categories"
+        override val enterNumberTitle = "Add phone number"
+        override val enterNumberHint = "Phone number"
+        override val enterNumberNameHint = "Display name (optional)"
+        override val addToAllowlist = "Add to Allow list"
+        override val addToBlocklist = "Add to Block list"
+        override val numberAlreadyExists = "This number is already in the list."
+        override val numberMovedToAllowlist = "Number moved to Allow list."
+        override val numberMovedToBlocklist = "Number moved to Block list."
+        override fun numberAddedAt(time: String) = "Added at $time"
+        override val menuDeleteNumber = "Remove number from list"
+        override val menuMoveToAllowlist = "Move to Allow list"
+        override val menuMoveToBlocklist = "Move to Block list"
+        override val menuEnableNumber = "Enable this number"
+        override val menuDisableNumber = "Disable this number"
+        override val advancedOrderNote = "The first matching rule is applied. Long-press a rule to change its order."
+        override val menuMoveRuleUp = "Move rule up"
+        override val menuMoveRuleDown = "Move rule down"
+        override val menuEnableRule = "Enable rule"
+        override val menuDisableRule = "Disable rule"
+        override val enableAllAdvancedRules = "Enable all rules"
+        override val disableAllAdvancedRules = "Disable all rules"
+        override val deleteAllAdvancedRules = "Delete all rules"
+        override fun enableAllAdvancedRulesMessage(count: Int) =
+            "Enable all $count advanced rules. They will apply again in their current order whenever Call protection is active."
+        override fun disableAllAdvancedRulesMessage(count: Int) =
+            "Disable all $count advanced rules. The rules stay saved for later; number lists and Contacts handling are not affected."
+        override fun deleteAllAdvancedRulesMessage(count: Int) =
+            "Permanently delete all $count advanced rules. This cannot be undone; number lists and blocking history are not deleted."
+        override val groupScreenTitle = "Handle by Contacts"
+        override val blockSavedContactsGroup = "Block all saved contacts"
+        override val blockSavedContactsGroupDesc = "Applies to every saved number except entries in the Allow list."
+        override val blockUnknownNumbersGroup = "Handle numbers outside Contacts"
+        override val blockUnknownNumbersGroupDesc = "Allow, always block, or block until a repeated caller reaches the threshold."
+        override val unknownPolicyTitle = "Outside Contacts"
+        override val unknownPolicyPass = "Allow if no rule matches"
+        override val unknownPolicyBlockAlways = "Block all"
+        override val unknownPolicyBlockUntilRepeat = "Block until repeated"
+        override val unknownPolicyPassDesc = "CallHS still checks the Block list and Advanced rules. If nothing matches, the call is allowed."
+        override val unknownPolicyBlockAlwaysDesc = "Every number confirmed outside Contacts is blocked unless it is in the Allow list."
+        override val unknownPolicyBlockUntilRepeatDesc = "If no rule matches, CallHS blocks the first calls and allows the number after it reaches the repeat threshold within the selected time."
+        override val specialGroupsTitle = "Special call types"
+        override val advancedRulesScreenTitle = "Advanced rules"
+        override val advancedRulesEmpty = "There are no advanced rules yet."
+        override val addAdvancedRule = "Add advanced rule"
+        override val ruleScopeLabel = "Which numbers?"
+        override val scopeUnknown = "Not saved"
+        override val scopeContacts = "Saved"
+        override val scopeAll = "All numbers"
+        override val scopeUnknownDesc = "Only check numbers not saved in Contacts."
+        override val scopeContactsDesc = "Only check numbers saved in Contacts."
+        override val scopeAllDesc = "Check both saved and unsaved numbers."
+        override fun ruleScopeSummary(scope: String) = when (scope) {
+            "saved_contact" -> scopeContacts
+            "not_saved" -> scopeUnknown
+            else -> scopeAll
+        }
+        override fun rulePreview(summary: String, scope: String) = "Block · $scope · $summary"
+        override val typeLength = "Number of digits"
+        override val lengthHint = "Example: 10"
+        override val ruleActionLabel = "What should CallHS do?"
+        override val actionBlock = "Block"
+        override val actionAllow = "Allow through"
+        override val actionBlockDesc = "Use the method selected in Call blocking settings."
+        override val actionAllowDesc = "Let the call through."
+        override val savedPolicyTitle = "Saved in Contacts"
+        override val savedPolicyFollowRules = "Apply rules"
+        override val savedPolicyAllow = "Always allow"
+        override val savedPolicyBlock = "Block all"
+        override val savedPolicyFollowRulesDesc = "This choice continues to Advanced rules."
+        override val savedPolicyAllowDesc = "Every saved number is allowed unless it is in the Block list."
+        override val savedPolicyBlockDesc = "Every saved number is blocked unless it is in the Allow list."
+        override val groupPriorityNote = "The Allow list and Block list are always checked before the choices on this screen."
+        override val processingGuideItemTitle = "Learn how CallHS handles calls"
+        override val processingGuideItemSubtitle = "See the order CallHS uses to check and handle an incoming call."
+        override val processingGuideSheetTitle = "How CallHS handles a call"
+        override val processingGuideIntro = "CallHS checks the following steps in order and stops as soon as it has a result."
+        override fun processingGuideStepTitle(step: Int) = when (step) {
+            1 -> "Check call protection"
+            2 -> "Check the Allow list"
+            3 -> "Check the Block list"
+            4 -> "Handle by Contacts"
+            5 -> "Check Advanced rules"
+            else -> "Use the default result"
+        }
+        override fun processingGuideStepDescription(step: Int) = when (step) {
+            1 -> "If protection is off or paused, every call is allowed."
+            2 -> "A number in the Allow list is allowed immediately."
+            3 -> "A number in the Block list is blocked."
+            4 -> "CallHS applies the selected choice for saved or unsaved numbers. Choose Apply rules to continue."
+            5 -> "CallHS checks from top to bottom. The first matching rule is applied."
+            else -> "If no list or rule matches, the call is allowed. Repeat handling only runs at the final step for unsaved numbers."
+        }
+        override val processingGuideConclusion = "The Allow list always has the highest priority."
+
+        override val commonIssuesTitle = "Common issues"
+        override val commonIssuesSubtitle =
+            "Causes and fixes when call blocking or notifications do not work as expected."
+        override val commonIssuesIntro =
+            "Choose the issue you are seeing. Check the possible causes in order before changing your rules."
+        override val commonIssuesPossibleCause = "Possible cause"
+        override val commonIssuesHowToFix = "How to fix it"
+        override val commonIssuesOpenBlockSettings = "Open call blocking settings"
+        override val commonIssuesOpenNotificationSettings = "Open Android notification settings"
+        override val commonIssuesExpand = "See causes and fixes"
+        override val commonIssuesCollapse = "Collapse guidance"
+        override fun commonIssueTitle(issue: Int) = when (issue) {
+            1 -> "Call blocking is not working"
+            2 -> "Some calls still get through"
+            3 -> "An important or saved number was blocked by mistake"
+            4 -> "No notification appears after a block"
+            5 -> "A notification has no sound, vibration, or heads-up alert"
+            6 -> "A call is missing from blocked-call history"
+            else -> "Private, VoIP, or brand-name calls are not blocked"
+        }
+        override fun commonIssueCause(issue: Int) = when (issue) {
+            1 -> "CallHS may no longer be the call-screening app, or Call protection may be off, paused, or inside a scheduled pause. Android may also stop sending calls to CallHS after the app is force-stopped or before the first unlock following a restart."
+            2 -> "The number may be on the Allow list, allowed by Contacts handling or the first matching rule, or may have reached the repeat-caller threshold. Silence only and Allow through also do not reject the call."
+            3 -> "The Block list is checked before Contacts handling. An Advanced rule scoped to saved numbers or all numbers can also match and block that contact."
+            4 -> "Notifications may be off in CallHS, disabled for the current scheduled period, denied by Android, or disabled for the notification channel. Only a call that is actually blocked creates an alert; Silence only and Allow through do not create blocked-call alerts."
+            5 -> "Sound, vibration, or the display style may be off in Advanced notification settings. Do Not Disturb, channel importance, and device-maker notification controls can also limit the alert."
+            6 -> "CallHS history records only calls that were actually blocked. Allowed and silence-only calls are not recorded there, and blocked-call history is not a copy of Android's system call log."
+            else -> "Standard Android generally sends a screening app only calls with a valid, visible telephone number. Private or unavailable callers, VoIP/SIP calls, and brand names depend on the Phone app and device-maker extensions, so they may never reach CallHS."
+        }
+        override fun commonIssueFix(issue: Int) = when (issue) {
+            1 -> "Reopen CallHS, grant the call-blocking role again, and turn on Call protection. Check enabled/pause schedules; after a restart, unlock the device at least once."
+            2 -> "Review the Allow list, Contacts handling, the first matching rule, and repeat-caller settings. Under Handling method, select either Block option if you want Android to stop the call."
+            3 -> "Add the number to the Allow list, which has the highest priority. Then review enabled rules and their Saved/All numbers scope to avoid broader blocking than intended."
+            4 -> "Select Notify on every block, check the advanced notification schedule, then allow notifications and enable the CallHS alert channel in Android."
+            5 -> "Check sound, vibration, and display style in Advanced notification settings. Then open the Android channel settings, enable sound and heads-up alerts, and check Do Not Disturb."
+            6 -> "Select a Block handling method, open the History tab, and choose the correct date or range. Check the system call log if you need to see calls that were allowed."
+            else -> "CallHS cannot guarantee blocking when Android does not deliver the call for screening. Add a visible number to the Block list; for private or VoIP calls, also check blocking features from the Phone app and your carrier."
+        }
+
+        override val tabRules = "Blocking rules"
+        override fun tabHistory(count: Int) = "History ($count)"
+        override val addRule = "Add blocking rule"
+        override val emptyRules =
+            "There are no advanced rules yet. Allow list, Block list and Handle by Contacts are managed separately."
+        override val emptyHistory = "No calls have been blocked yet. CallHS will show them here after blocking."
+        override fun ruleCount(count: Int) = if (count == 1) "1 saved rule" else "$count saved rules"
+        override val ruleEnabledStatus = "Active"
+        override val ruleDisabledStatus = "Off"
+        override fun blockedCount(count: Int) = if (count == 1) "Blocked once" else "Blocked $count times"
+        override fun blockedAt(time: String) = "Blocked at $time"
+        override fun matchedRule(rule: String) = "By rule: $rule"
+        override fun repeatCallerGuardReason(attempt: Int, threshold: Int, minutes: Int) =
+            "Unknown caller blocked below threshold · attempt $attempt/$threshold · $minutes min window"
+        override fun consecutiveMissed(count: Int) =
+            if (count == 1) "1 unanswered call" else "$count consecutive unanswered calls"
+        override val menuDeleteRule = "Delete blocking rule"
+        override val menuDeleteHistory = "Remove from history"
+
+        override val historyPeriodDay = "Day"
+        override val historyPeriodWeek = "Week"
+        override val historyPeriodMonth = "Month"
+        override val historyPickDate = "Choose a specific date"
+        override val historyDateRangeNote = "You can only choose a date within the last 30 days."
+        override val historyOverviewTitle = "Blocking overview"
+        override val historyTotalBlocks = "Blocks"
+        override val historyUniqueNumbers = "Unique numbers"
+        override val historyPeakHour = "Peak hour"
+        override val historyPeakDay = "Peak day"
+        override val historyNoPeak = "No data"
+        override val historyActivityTitle = "Activity distribution"
+        override val historyHourlySubtitle = "One-hour intervals · from 0h through 24h"
+        override val historyDailySubtitle = "Every calendar day in the selected period"
+        override val historySwipeChartHint = "Swipe horizontally to view the full chart"
+        override fun historyHourBucket(fromHour: Int, toHour: Int) = "${fromHour}h–${toHour}h"
+        override fun historyDayAxis(day: Int) = "Day %02d".format(day)
+        override fun historyWeekdayAxis(day: java.time.DayOfWeek) = when (day) {
+            java.time.DayOfWeek.MONDAY -> "Monday"
+            java.time.DayOfWeek.TUESDAY -> "Tuesday"
+            java.time.DayOfWeek.WEDNESDAY -> "Wednesday"
+            java.time.DayOfWeek.THURSDAY -> "Thursday"
+            java.time.DayOfWeek.FRIDAY -> "Friday"
+            java.time.DayOfWeek.SATURDAY -> "Saturday"
+            java.time.DayOfWeek.SUNDAY -> "Sunday"
+        }
+        override val historyDayPartsTitle = "By time of day"
+        override val historyDayPartsSubtitle = "Uses the same ranges as Call analysis"
+        override fun historyDayPartRange(fromHour: Int, toHour: Int) = "%02dh–%02dh".format(fromHour, toHour)
+        override val historyReasonsTitle = "Top blocking reasons"
+        override val historyTopNumbersTitle = "Most-blocked numbers"
+        override fun historyDetails(count: Int) = "Detailed history ($count)"
+        override fun historyEvents(count: Int) = if (count == 1) "1 event" else "$count events"
+        override fun historyRange(from: String, to: String) = "$from – $to"
+        override fun historyTrendUp(count: Int) = if (count == 1) {
+            "Up 1 event from the previous period"
+        } else {
+            "Up $count events from the previous period"
+        }
+        override fun historyTrendDown(count: Int) = if (count == 1) {
+            "Down 1 event from the previous period"
+        } else {
+            "Down $count events from the previous period"
+        }
+        override val historyTrendSame = "No change from the previous period"
+        override val historyNoEventsInPeriod = "No calls were blocked in this period."
+
+        override val createRuleTitle = "Add blocking rule"
+        override val editRuleTitle = "Edit blocking rule"
+        override val save = "Save rule"
+        override val update = "Update"
+        override val ruleTypeLabel = "Choose calls to handle"
+        override val ruleValueLabel = "Number or digit sequence"
+        override val exactValueLabel = "Enter a phone number"
+        override val prefixValueLabel = "Enter a starting sequence"
+        override val suffixValueLabel = "Enter an ending sequence"
+        override val containsValueLabel = "Enter a digit sequence"
+        override val lengthValueLabel = "Enter the number of digits"
+        override val numberHint = "Enter a number or number sequence"
+        override val carrierHint = "Choose a carrier"
+        override val chooseRuleType = "Choose calls to handle"
+        override val chooseCarrier = "Choose carrier"
+        override val typeExact = "One specific phone number"
+        override val typePrefix = "Number starts with"
+        override val typeSuffix = "Number ends with"
+        override val typeContains = "Number contains"
+        override val typeCarrier = "By mobile carrier"
+        override val typeSpamRisk = "Calls with spam-risk signals"
+        override val spamRiskPickerDescription =
+            "A call with at least one risk signal recognized by CallHS."
+        override val spamRiskDetailsTitle =
+            "CallHS blocks when it detects at least one of these signals:"
+        override val spamRiskPrefixDetail =
+            "A complete Vietnamese number uses the 022, 023, 024, 028, 059 or 099 prefix."
+        override val spamRiskUnknownPrefixDetail =
+            "A 10-digit Vietnamese mobile number has a prefix CallHS does not recognize."
+        override val spamRiskVerificationDetail =
+            "On Android 11 or later, the mobile network cannot verify the caller's number. CallHS skips this signal if the device provides no verification information."
+        override val spamRiskWarning =
+            "These prefixes can still belong to valid numbers. This filter may block legitimate calls; the Allow list always takes priority."
+        override fun spamRiskReasonPrefix(prefix: String) = "Spam-risk signal · Matches prefix $prefix"
+        override fun spamRiskReasonUnknownMobilePrefix(prefix: String) =
+            "Spam-risk signal · Unrecognized mobile prefix $prefix"
+        override val spamRiskReasonVerificationFailed =
+            "Spam-risk signal · Network verification failed"
+        override val typeSpecial = "Special call types"
+        override val typeContacts = "From contacts"
+        override val typeCallHistory = "From call history"
+        override val typeCountryAndAreaCode = "Countries & Vietnam prefixes"
+        override val typeBrandName = "By Brandname"
+        override val specialTitle = "Choose one call type"
+        override val specialPrivate = "Hidden-number calls"
+        override val specialPrivateDesc =
+            "A call that does not provide the caller's CLI or phone number."
+        override val specialUnknownContact = "Numbers not saved in Contacts"
+        override val specialUnknownContactDesc = "Detect phone numbers that do not match any contact on this device."
+        override val specialVoip = "Internet calls (legacy rule)"
+        override val specialVoipDesc = "Used only to read old history or data."
+        override val specialSipPhone = "SIP URI with a phone user"
+        override val specialSipPhoneDesc =
+            "The user part before @ is a phone number, for example sip:+84912345678@provider.vn."
+        override val specialSipText = "SIP URI with a text user"
+        override val specialSipTextDesc =
+            "The user part before @ is a text or character string, for example sip:support@company.vn."
+        override val identityTermsTitle = "Learn call terminology"
+        override val learnVoip = "What is VoIP?"
+        override val learnSip = "What is SIP?"
+        override val learnUri = "What is a URI?"
+        override val learnCli = "What is CLI?"
+        override val learnCnam = "What is CNAM?"
+        override val voipExplanation =
+            "VoIP (Voice over Internet Protocol) carries voice over an IP network such as Wi-Fi, 4G/5G, or the Internet instead of relying only on a traditional voice network.\n\n" +
+                "A VoIP call may display a regular phone number or a SIP identity. VoIP describes how a call is transported; it does not by itself mean that the call is spam or a scam.\n\n" +
+                "In CallHS, “Internet call (legacy rule)” is retained only for reading older data. For a new rule, choose the appropriate SIP condition when the device supplies the call URI."
+        override val sipExplanation =
+            "SIP (Session Initiation Protocol) is used to establish, manage, and end calling sessions over an IP network. A SIP identity commonly looks like sip:user@domain; sips: uses a secured connection for SIP signaling.\n\n" +
+                "The user part before @ may be a phone number, such as sip:+84912345678@provider.vn, or text such as sip:support@company.vn. CallHS exposes these as two separate special-call conditions.\n\n" +
+                "Standard Android normally delivers only tel: addresses to CallScreeningService. CallHS can identify SIP/sips only when the device or manufacturer passes that URI to the app."
+        override val uriExplanation =
+            "URI (Uniform Resource Identifier) is a string that identifies a resource. For a call, the URI describes the kind of caller address and its value.\n\n" +
+                "The part before the colon is the scheme. For example, tel:+84912345678 uses tel:, sip:user@domain uses sip:, and sips:user@domain uses sips:. A URI is not necessarily a web address and does not always contain a phone number.\n\n" +
+                "CallHS classifies a SIP condition only when the URI is valid, uses the sip: or sips: scheme, and contains a user before @."
+        override val cliExplanation =
+            "CLI (Calling Line Identification) is the caller's phone-number information supplied by the network or calling service, for example +84912345678. CallHS uses CLI for rules based on a number, prefix, suffix, length, carrier, or region.\n\n" +
+                "CLI differs from CNAM, which is a caller name, and from a name saved by the user in Contacts. CLI can be hidden or spoofed, so the displayed number does not guarantee the caller's true identity."
+        override val cnamExplanation =
+            "CNAM (Calling Name) is a caller name supplied by the network or calling service for display, such as Vietcombank. CallHS uses this data for Brandname rules.\n\n" +
+                "CNAM is neither CLI nor contactDisplayName—the name a user saves in Contacts. Renaming a contact on the device does not change CNAM.\n\n" +
+                "Standard CallScreeningService does not provide callerDisplayName. CallHS can match a Brandname only when the device or manufacturer extends the callback and delivers that name to the app."
+        override val brandNamePickerTitle = "Choose Brandnames"
+        override val brandNamePickerOpen = "Choose or enter Brandnames"
+        override val brandNameCaseSensitiveNote =
+            "Up to 5 names. For example, “Vietcombank” differs from “VIETCOMBANK”. Choose a suggestion or enter your own."
+        override val brandNameInputHint = "Enter the exact Brandname"
+        override val brandNameAdd = "Add"
+        override fun brandNameSelectedCount(count: Int, max: Int) = "$count/$max names selected"
+        override val brandNameTelecomCategory = "Telecom carriers"
+        override val brandNameBankCategory = "Banks"
+        override val brandNameWalletCategory = "E-wallets"
+        override val brandNameServiceCategory = "Services & agencies"
+        override val brandNameSpamCategory = "Spam/scam warning labels"
+        override val brandNameSpamDisclaimer =
+            "These are common warning labels, not a verified registry of malicious Brandnames. Display text varies by device."
+        override val brandNameAndroidLimit =
+            "Standard CallScreeningService does not provide callerDisplayName. A Brandname can be identified only when the device/OEM extends the callback and delivers that name to CallHS; otherwise the app has no Brandname data to match."
+        override val specialAndroidLimit =
+            "Standard Android sends only tel: handles to CallScreeningService. SIP/sips support is an OEM (Original Equipment Manufacturer) or device extension; if the URI is not delivered to CallHS, the app has no data with which to identify the SIP criterion."
+        override val contactPickerTitle = "Choose contacts"
+        override val contactPickerOpen = "Choose from contacts"
+        override val contactPickerSearchHint = "Search names or phone numbers"
+        override val contactPickerPermissionTitle = "Contacts permission needed"
+        override val contactPickerPermissionBody =
+            "Allow CallHS to read contacts so you can choose people and identify unknown numbers. The app never edits or uploads your contacts."
+        override val contactPickerPermissionAction = "Allow access"
+        override fun contactPickerSelectedCount(count: Int) =
+            if (count == 1) "1 contact selected" else "$count contacts selected"
+        override val contactPickerDone = "Done"
+        override val contactPickerEmpty = "There are no contacts with phone numbers yet."
+        override val contactPickerNoResults = "No matching contacts found."
+        override val callHistoryPickerTitle = "Choose numbers from call history"
+        override val callHistoryPickerOpen = "Choose from call history"
+        override val callHistoryPickerSearchHint = "Search names or phone numbers"
+        override fun callHistoryPickerSelectedCount(count: Int) =
+            if (count == 1) "1 number selected" else "$count numbers selected"
+        override val callHistoryPickerEmpty = "There are no valid phone numbers in call history yet."
+        override val callHistoryPickerNoResults = "No numbers match your search or filters."
+        override val callHistoryPickerPreviouslySelected = "Previously selected"
+        override val callHistoryPickerPreviouslySelectedNote =
+            "These numbers are not in the currently displayed history. You can still deselect them here."
+        override val validationSelectSpecial = "Choose at least one call type."
+        override val validationSelectBrandName = "Choose or enter at least one Brandname."
+        override val validationSelectContact = "Choose at least one contact."
+        override val validationSelectCallHistory = "Choose at least one number from call history."
+        override val regionPickerTitle = "Choose countries & Vietnam prefixes"
+        override val regionInternationalSection = "International country codes"
+        override val regionVietnamPrefixSection = "Vietnam prefixes"
+        override val regionAllInternationalExceptVietnam = "All international numbers except Vietnam (+84)"
+        override val regionAllInternationalExceptVietnamDesc =
+            "Detect international numbers whose country code is not Vietnam (+84)."
+        override val regionChina = "China (+86)"
+        override val regionCambodia = "Cambodia (+855)"
+        override val regionMyanmar = "Myanmar (+95)"
+        override val regionNanpShared = "NANP (+1, including the United States)"
+        override val regionGermany = "Germany (+49)"
+        override val regionLaos = "Laos (+856)"
+        override val regionThailand = "Thailand (+66)"
+        override val regionMalaysia = "Malaysia (+60)"
+        override val regionSingapore = "Singapore (+65)"
+        override val regionIndonesia = "Indonesia (+62)"
+        override val regionPhilippines = "Philippines (+63)"
+        override val regionIndia = "India (+91)"
+        override val regionPrefix024 = "024 · Hanoi"
+        override val regionPrefix022 = "022 · Fixed-line prefix family"
+        override val regionPrefix028 = "028 · Ho Chi Minh City"
+        override val regionPrefix059 = "059 · Mobile prefix"
+        override val regionPrefix099 = "099 · Gmobile mobile prefix"
+        override val regionCallerIdWarning =
+            "Filtering uses the displayed caller ID. Caller ID can be spoofed, so a code does not guarantee the call's true origin."
+        override val validationSelectRegion = "Choose at least one country code or Vietnam prefix."
+        override val invalidRule = "That value is not valid. For a number sequence, enter at least 2 digits."
+        override val duplicateRule = "This blocking rule already exists."
+        override val maxRules = "You've reached the limit of 200 blocking rules."
+        override val discardTitle = "Discard changes?"
+        override val discardMessage = "Your unsaved changes to this blocking rule will be lost."
+        override val discardStay = "Keep editing"
+        override val discardExit = "Discard"
+
+        override fun ruleSummary(type: String, value: String) = when (type) {
+            "exact" -> "Number $value"
+            "prefix" -> "Starts with $value"
+            "suffix" -> "Ends with $value"
+            "contains" -> "Contains $value"
+            "length" -> "$value digits long"
+            "any" -> "Any number in scope"
+            "carrier" -> "$value carrier"
+            "repeat_unanswered" -> "Legacy rule · Repeated unanswered calls"
+            "spam_risk" -> typeSpamRisk
+            "special" -> specialSummary(value)
+            "brand_name" -> BrandNameRuleCodec.decode(value).let { names ->
+                if (names.isEmpty()) typeBrandName else "$typeBrandName: ${names.joinToString(", ")}"
+            }
+            "contacts" -> contactsSummary(value)
+            "call_history" -> callHistorySummary(value)
+            "geographic" -> regionSummary(value)
+            else -> value
+        }
+
+        override fun specialSummary(value: String): String {
+            val labels = SpecialCallCondition.decode(value).map { condition ->
+                when (condition) {
+                    SpecialCallCondition.PRIVATE_NUMBER -> specialPrivate
+                    SpecialCallCondition.UNKNOWN_CONTACT -> specialUnknownContact
+                    SpecialCallCondition.VOIP -> specialVoip
+                    SpecialCallCondition.SIP_PHONE_NUMBER -> specialSipPhone
+                    SpecialCallCondition.SIP_TEXT_ID -> specialSipText
+                }
+            }
+            return labels.takeIf { it.isNotEmpty() }?.joinToString(" · ") ?: typeSpecial
+        }
+
+        override fun contactsSummary(value: String): String {
+            val count = ContactRuleCodec.selectedCount(value)
+            return when (count) {
+                0 -> typeContacts
+                1 -> "One selected contact"
+                else -> "$count selected contacts"
+            }
+        }
+
+        override fun callHistorySummary(value: String): String {
+            val count = CallHistoryRuleCodec.selectedCount(value)
+            return when (count) {
+                0 -> typeCallHistory
+                1 -> "One number from call history"
+                else -> "$count numbers from call history"
+            }
+        }
+
+        override fun regionSummary(value: String): String {
+            val labels = GeographicBlockOption.decode(value).map { option ->
+                when (option) {
+                    GeographicBlockOption.ALL_INTERNATIONAL_EXCEPT_VIETNAM -> regionAllInternationalExceptVietnam
+                    GeographicBlockOption.CHINA -> regionChina
+                    GeographicBlockOption.CAMBODIA -> regionCambodia
+                    GeographicBlockOption.MYANMAR -> regionMyanmar
+                    GeographicBlockOption.NANP_SHARED -> regionNanpShared
+                    GeographicBlockOption.GERMANY -> regionGermany
+                    GeographicBlockOption.LAOS -> regionLaos
+                    GeographicBlockOption.THAILAND -> regionThailand
+                    GeographicBlockOption.MALAYSIA -> regionMalaysia
+                    GeographicBlockOption.SINGAPORE -> regionSingapore
+                    GeographicBlockOption.INDONESIA -> regionIndonesia
+                    GeographicBlockOption.PHILIPPINES -> regionPhilippines
+                    GeographicBlockOption.INDIA -> regionIndia
+                    GeographicBlockOption.VIETNAM_PREFIX_024 -> regionPrefix024
+                    GeographicBlockOption.VIETNAM_PREFIX_022 -> regionPrefix022
+                    GeographicBlockOption.VIETNAM_PREFIX_028 -> regionPrefix028
+                    GeographicBlockOption.VIETNAM_PREFIX_059 -> regionPrefix059
+                    GeographicBlockOption.VIETNAM_PREFIX_099 -> regionPrefix099
+                }
+            }
+            return labels.takeIf { it.isNotEmpty() }?.joinToString(" · ") ?: typeCountryAndAreaCode
+        }
+
+        override val notificationChannelName = "Urgent blocked-call alerts"
+        override val notificationChannelDescription =
+            "Heads-up, sound and vibration when CallHS blocks a call"
+        override fun notificationTitle(number: String) = "Blocked a call from $number"
+        override fun notificationBody(total: Int, rule: String) = "Block #$total for this number · $rule"
+    }
+
+    private object Backup : BackupStrings {
+        override val settingsSection = "Backup & restore"
+        override val cardTitle = "Back up & restore data"
+        override val cardSubtitle = "Export your data to a file and import it back when needed"
+        override val open = "Open backup & restore"
+
+        override val screenTitle = "Backup & restore"
+        override val callLogNote =
+            "The system call log is read-only and is not backed up; CallHS's own blocked-call history can be backed up here."
+
+        override val backupTitle = "Backup (export file)"
+        override val backupDesc =
+            "Pick the data to back up, then export it to a file. Keep this file in case you lose your phone or switch to a new one."
+        override val chooseData = "Choose data"
+        override val exportButton = "Export to file"
+        override val exporting = "Exporting…"
+
+        override val restoreTitle = "Restore (import file)"
+        override val restoreDesc = "Pick a saved backup file to restore its data into the app."
+        override val pickFileButton = "Choose backup file"
+        override val pickAnotherButton = "Choose another file"
+        override val restoreButton = "Restore"
+        override val restoring = "Restoring…"
+        override val fileLabel = "Backup file"
+        override fun fileMeta(date: String, appVersion: String) =
+            if (appVersion.isBlank()) "Created $date" else "Created $date · version $appVersion"
+        override val chooseSections = "Choose what to restore"
+
+        override val modeTitle = "How to restore"
+        override val modeReplace = "Replace all"
+        override val modeReplaceDesc = "Delete current data and replace it with the backup."
+        override val modeAdd = "Add, don't overwrite"
+        override val modeAddDesc = "Only add new items, keep existing data untouched."
+        override val modeUpdate = "Update & add"
+        override val modeUpdateDesc = "Add new items and update matching ones from the backup."
+
+        override val secTemplates = "Message templates"
+        override val secTemplatesSub = "Your saved message templates"
+        override val secQr = "QR scan history"
+        override val secQrSub = "Recently scanned QR codes"
+        override val secCategories = "Categories"
+        override val secCategoriesSub = "Groups & their member numbers"
+        override val secBlockRules = "Call-blocking rules"
+        override val secBlockRulesSub = "Rules, handling method, protection state and notifications"
+        override val secBlockHistory = "Blocked-call history"
+        override val secBlockHistorySub = "Events blocked by CallHS"
+        override val secMyNumber = "My number"
+        override val secMyNumberSub = "Your phone numbers per SIM"
+        override val secDisplay = "Display settings"
+        override val secDisplaySub = "Theme, language, text size"
+        override fun itemsCount(n: Int) = if (n == 1) "1 item" else "$n items"
+
+        override val confirmReplaceTitle = "Overwrite data?"
+        override val confirmReplaceMessage =
+            "“Replace all” will DELETE the current data of the selected sections and replace it with the backup. This cannot be undone."
+
+        override val exportOkTitle = "Backup saved"
+        override val exportOkMessage = "Your data was exported to the file successfully."
+        override val resultTitle = "Restored"
+        override fun resultLine(section: String, added: Int, updated: Int, skipped: Int): String {
+            val parts = buildList {
+                if (added > 0) add("+$added added")
+                if (updated > 0) add("$updated updated")
+                if (skipped > 0) add("$skipped skipped")
+            }
+            return if (parts.isEmpty()) "$section: no changes" else "$section: ${parts.joinToString(" · ")}"
+        }
+        override val displayApplied = "Applied"
+        override val displayKept = "Kept"
+        override val truncatedNote = "Some items exceeded the limit and were left out."
+        override val done = "Done"
+
+        override val errInvalidFile = "Invalid file, or not a CallHS backup."
+        override val errWriteFailed = "Couldn't save the file. Please try again."
+        override val errReadFailed = "Couldn't read the file. Please try again."
+        override val errNothingSelected = "Please select at least one section."
+        override val errEmptyBackup = "The backup file has no data to restore."
     }
 
     /** Tên tháng tiếng Anh cho [CallList.monthYear]. */

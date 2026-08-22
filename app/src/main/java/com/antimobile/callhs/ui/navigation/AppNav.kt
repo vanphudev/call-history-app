@@ -29,6 +29,18 @@ import com.antimobile.callhs.ui.calllist.CallListViewModel
 import com.antimobile.callhs.ui.category.CategoryEditorScreen
 import com.antimobile.callhs.ui.category.CategoryEditorViewModel
 import com.antimobile.callhs.ui.category.CategoryListScreen
+import com.antimobile.callhs.ui.blocking.CallBlockRuleEditorScreen
+import com.antimobile.callhs.ui.blocking.CallBlockRuleEditorViewModel
+import com.antimobile.callhs.ui.blocking.CallBlockScreen
+import com.antimobile.callhs.ui.blocking.CallBlockSettingsScreen
+import com.antimobile.callhs.ui.blocking.CallBlockNotificationAdvancedScreen
+import com.antimobile.callhs.ui.blocking.CallBlockViewModel
+import com.antimobile.callhs.ui.blocking.CallBlockNumberListScreen
+import com.antimobile.callhs.ui.blocking.CallBlockGroupScreen
+import com.antimobile.callhs.ui.blocking.CallBlockAdvancedRulesScreen
+import com.antimobile.callhs.ui.blocking.CallBlockCommonIssuesScreen
+import com.antimobile.callhs.data.blocking.CallBlockAction
+import com.antimobile.callhs.ui.blocking.rememberCallBlockNotificationUiState
 import com.antimobile.callhs.ui.components.UpdateNoticeModals
 import com.antimobile.callhs.ui.contacts.ContactsScreen
 import com.antimobile.callhs.ui.contacts.ContactsViewModel
@@ -40,6 +52,8 @@ import com.antimobile.callhs.ui.phonestats.PhoneStatsScreen
 import com.antimobile.callhs.ui.phonestats.PhoneStatsViewModel
 import com.antimobile.callhs.ui.repeatstats.RepeatStatsScreen
 import com.antimobile.callhs.ui.repeatstats.RepeatStatsViewModel
+import com.antimobile.callhs.ui.settings.BackupScreen
+import com.antimobile.callhs.ui.settings.BackupViewModel
 import com.antimobile.callhs.ui.settings.FontSizeScreen
 import com.antimobile.callhs.ui.settings.LanguageScreen
 import com.antimobile.callhs.ui.settings.MessageTemplateManagerScreen
@@ -74,6 +88,17 @@ private object Routes {
     const val CATEGORIES = "categories"
     const val CATEGORY_EDIT = "category/{id}"
     fun categoryEdit(id: String) = "category/$id"
+    const val BACKUP = "backup"
+    const val CALL_BLOCK = "callblock"
+    const val CALL_BLOCK_SETTINGS = "callblock/settings"
+    const val CALL_BLOCK_NOTIFICATION_ADVANCED = "callblock/settings/notifications"
+    const val CALL_BLOCK_RULE = "callblock/rule/{id}"
+    fun callBlockRule(id: String) = "callblock/rule/$id"
+    const val CALL_BLOCK_ALLOWLIST = "callblock/allowlist"
+    const val CALL_BLOCK_BLOCKLIST = "callblock/blocklist"
+    const val CALL_BLOCK_GROUPS = "callblock/groups"
+    const val CALL_BLOCK_ADVANCED = "callblock/advanced"
+    const val CALL_BLOCK_COMMON_ISSUES = "callblock/common-issues"
     const val DONATE = "donate"
 }
 
@@ -84,6 +109,7 @@ fun AppNav() {
     val detailVm: CallDetailViewModel = viewModel()
     val costVm: CostStatsViewModel = viewModel()
     val phoneStatsVm: PhoneStatsViewModel = viewModel()
+    val blockNotificationUiState = rememberCallBlockNotificationUiState()
 
     // Quay lại app từ nền (ON_START của Activity) → TỰ nạp lại dữ liệu, không cần bấm "Làm mới".
     // Chỉ làm mới danh sách khi đã từng nạp (bỏ qua lần khởi động lạnh — màn hình tự nạp lần đầu);
@@ -242,6 +268,8 @@ fun AppNav() {
                 onOpenDirectory = { dataset -> whenResumed { nav.navigate(Routes.directory(dataset.key)) } },
                 onOpenLegal = { doc -> whenResumed { nav.navigate(Routes.legal(doc)) } },
                 onOpenCategories = { whenResumed { nav.navigate(Routes.CATEGORIES) } },
+                onOpenCallBlocking = { whenResumed { nav.navigate(Routes.CALL_BLOCK) } },
+                onOpenBackup = { whenResumed { nav.navigate(Routes.BACKUP) } },
                 onOpenDonate = { whenResumed { nav.navigate(Routes.DONATE) } }
             )
         }
@@ -405,6 +433,171 @@ fun AppNav() {
                     nav.navigate(Routes.DETAIL)
                 }
             )
+        }
+
+        composable(
+            route = Routes.BACKUP,
+            enterTransition = { slideInHorizontally(tween(300)) { it } + fadeIn(tween(300)) },
+            exitTransition = { slideOutHorizontally(tween(300)) { -it / 4 } + fadeOut(tween(300)) },
+            popEnterTransition = { slideInHorizontally(tween(300)) { -it / 4 } + fadeIn(tween(300)) },
+            popExitTransition = { slideOutHorizontally(tween(300)) { it } + fadeOut(tween(300)) }
+        ) {
+            val backupVm: BackupViewModel = viewModel()
+            BackupScreen(vm = backupVm, onBack = { nav.popBackStack() })
+        }
+
+        composable(
+            route = Routes.CALL_BLOCK,
+            enterTransition = { slideInHorizontally(tween(300)) { it } + fadeIn(tween(300)) },
+            exitTransition = { slideOutHorizontally(tween(300)) { -it / 4 } + fadeOut(tween(300)) },
+            popEnterTransition = { slideInHorizontally(tween(300)) { -it / 4 } + fadeIn(tween(300)) },
+            popExitTransition = { slideOutHorizontally(tween(300)) { it } + fadeOut(tween(300)) }
+        ) { backStackEntry ->
+            val blockVm: CallBlockViewModel = viewModel()
+            val whenResumed: (() -> Unit) -> Unit = { action ->
+                if (backStackEntry.lifecycle.currentState == Lifecycle.State.RESUMED) action()
+            }
+            CallBlockScreen(
+                vm = blockVm,
+                notificationUiState = blockNotificationUiState,
+                onBack = { nav.popBackStack() },
+                onOpenSettings = {
+                    whenResumed {
+                        nav.navigate(Routes.CALL_BLOCK_SETTINGS) { launchSingleTop = true }
+                    }
+                },
+                onOpenAllowlist = { whenResumed { nav.navigate(Routes.CALL_BLOCK_ALLOWLIST) { launchSingleTop = true } } },
+                onOpenBlocklist = { whenResumed { nav.navigate(Routes.CALL_BLOCK_BLOCKLIST) { launchSingleTop = true } } },
+                onOpenGroups = { whenResumed { nav.navigate(Routes.CALL_BLOCK_GROUPS) { launchSingleTop = true } } },
+                onOpenAdvancedRules = { whenResumed { nav.navigate(Routes.CALL_BLOCK_ADVANCED) { launchSingleTop = true } } },
+                onOpenCommonIssues = { whenResumed { nav.navigate(Routes.CALL_BLOCK_COMMON_ISSUES) { launchSingleTop = true } } },
+                onOpenNumber = { number ->
+                    whenResumed {
+                        detailVm.load(number)
+                        nav.navigate(Routes.DETAIL) { launchSingleTop = true }
+                    }
+                },
+            )
+        }
+
+        composable(
+            route = Routes.CALL_BLOCK_ALLOWLIST,
+            enterTransition = { slideInHorizontally(tween(300)) { it } + fadeIn(tween(300)) },
+            popExitTransition = { slideOutHorizontally(tween(300)) { it } + fadeOut(tween(300)) },
+        ) {
+            val blockVm: CallBlockViewModel = viewModel()
+            val contactVm: CallBlockRuleEditorViewModel = viewModel()
+            CallBlockNumberListScreen(
+                vm = blockVm,
+                contactVm = contactVm,
+                callListVm = listVm,
+                action = CallBlockAction.ALLOW,
+                onBack = { nav.popBackStack() },
+            )
+        }
+
+        composable(
+            route = Routes.CALL_BLOCK_BLOCKLIST,
+            enterTransition = { slideInHorizontally(tween(300)) { it } + fadeIn(tween(300)) },
+            popExitTransition = { slideOutHorizontally(tween(300)) { it } + fadeOut(tween(300)) },
+        ) {
+            val blockVm: CallBlockViewModel = viewModel()
+            val contactVm: CallBlockRuleEditorViewModel = viewModel()
+            CallBlockNumberListScreen(
+                vm = blockVm,
+                contactVm = contactVm,
+                callListVm = listVm,
+                action = CallBlockAction.BLOCK,
+                onBack = { nav.popBackStack() },
+            )
+        }
+
+        composable(
+            route = Routes.CALL_BLOCK_GROUPS,
+            enterTransition = { slideInHorizontally(tween(300)) { it } + fadeIn(tween(300)) },
+            popExitTransition = { slideOutHorizontally(tween(300)) { it } + fadeOut(tween(300)) },
+        ) {
+            val blockVm: CallBlockViewModel = viewModel()
+            CallBlockGroupScreen(vm = blockVm, onBack = { nav.popBackStack() })
+        }
+
+        composable(
+            route = Routes.CALL_BLOCK_ADVANCED,
+            enterTransition = { slideInHorizontally(tween(300)) { it } + fadeIn(tween(300)) },
+            popExitTransition = { slideOutHorizontally(tween(300)) { it } + fadeOut(tween(300)) },
+        ) { backStackEntry ->
+            val blockVm: CallBlockViewModel = viewModel()
+            val whenResumed: (() -> Unit) -> Unit = { action ->
+                if (backStackEntry.lifecycle.currentState == Lifecycle.State.RESUMED) action()
+            }
+            CallBlockAdvancedRulesScreen(
+                vm = blockVm,
+                onBack = { nav.popBackStack() },
+                onCreate = { whenResumed { nav.navigate(Routes.callBlockRule("new")) } },
+                onEdit = { id -> whenResumed { nav.navigate(Routes.callBlockRule(id.toString())) } },
+            )
+        }
+
+        composable(
+            route = Routes.CALL_BLOCK_COMMON_ISSUES,
+            enterTransition = { slideInHorizontally(tween(300)) { it } + fadeIn(tween(300)) },
+            exitTransition = { slideOutHorizontally(tween(300)) { -it / 4 } + fadeOut(tween(300)) },
+            popEnterTransition = { slideInHorizontally(tween(300)) { -it / 4 } + fadeIn(tween(300)) },
+            popExitTransition = { slideOutHorizontally(tween(300)) { it } + fadeOut(tween(300)) },
+        ) {
+            CallBlockCommonIssuesScreen(
+                onBack = { nav.popBackStack() },
+                onOpenBlockSettings = {
+                    nav.navigate(Routes.CALL_BLOCK_SETTINGS) { launchSingleTop = true }
+                },
+            )
+        }
+
+        composable(
+            route = Routes.CALL_BLOCK_SETTINGS,
+            enterTransition = { slideInHorizontally(tween(300)) { it } + fadeIn(tween(300)) },
+            exitTransition = { slideOutHorizontally(tween(300)) { -it / 4 } + fadeOut(tween(300)) },
+            popEnterTransition = { slideInHorizontally(tween(300)) { -it / 4 } + fadeIn(tween(300)) },
+            popExitTransition = { slideOutHorizontally(tween(300)) { it } + fadeOut(tween(300)) }
+        ) {
+            CallBlockSettingsScreen(
+                notificationUiState = blockNotificationUiState,
+                onBack = { nav.popBackStack() },
+                onOpenAdvancedNotifications = {
+                    nav.navigate(Routes.CALL_BLOCK_NOTIFICATION_ADVANCED) { launchSingleTop = true }
+                },
+            )
+        }
+
+        composable(
+            route = Routes.CALL_BLOCK_NOTIFICATION_ADVANCED,
+            enterTransition = { slideInHorizontally(tween(300)) { it } + fadeIn(tween(300)) },
+            popExitTransition = { slideOutHorizontally(tween(300)) { it } + fadeOut(tween(300)) },
+        ) {
+            CallBlockNotificationAdvancedScreen(onBack = { nav.popBackStack() })
+        }
+
+        composable(
+            route = Routes.CALL_BLOCK_RULE,
+            arguments = listOf(navArgument("id") { type = NavType.StringType }),
+            enterTransition = { slideInHorizontally(tween(300)) { it } + fadeIn(tween(300)) },
+            exitTransition = { slideOutHorizontally(tween(300)) { -it / 4 } + fadeOut(tween(300)) },
+            popEnterTransition = { slideInHorizontally(tween(300)) { -it / 4 } + fadeIn(tween(300)) },
+            popExitTransition = { slideOutHorizontally(tween(300)) { it } + fadeOut(tween(300)) }
+        ) { backStackEntry ->
+            val rawId = backStackEntry.arguments?.getString("id")
+            val ruleId = rawId?.takeIf { it != "new" }?.toLongOrNull()
+            if (rawId == "new" || ruleId != null) {
+                val editorVm: CallBlockRuleEditorViewModel = viewModel()
+                CallBlockRuleEditorScreen(
+                    vm = editorVm,
+                    callListVm = listVm,
+                    ruleId = ruleId,
+                    onExit = { nav.popBackStack() },
+                )
+            } else {
+                LaunchedEffect(Unit) { nav.popBackStack() }
+            }
         }
 
         composable(

@@ -2,6 +2,8 @@ package com.antimobile.callhs.util
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.antimobile.callhs.data.backup.MergeMode
+import com.antimobile.callhs.data.backup.SectionResult
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -196,5 +198,69 @@ object MessageTemplateStore {
         val updated = load(context).filterNot { it.id == id }
         save(context, updated)
         return updated
+    }
+
+    /**
+     * KHÔI PHỤC mẫu tin nhắn từ một bản sao lưu theo [mode]. Khoá so trùng = TIÊU ĐỀ (đã cắt khoảng trắng,
+     * không phân biệt hoa/thường) — coi tiêu đề là "danh tính" của mẫu.
+     *  - [MergeMode.REPLACE]: danh sách trở thành ĐÚNG [incoming].
+     *  - [MergeMode.ADD]: giữ mẫu hiện có, chỉ thêm mẫu có tiêu đề CHƯA tồn tại.
+     *  - [MergeMode.UPDATE]: đụng trùng tiêu đề → ghi đè nội dung theo bản sao lưu; tiêu đề mới → thêm.
+     *
+     * Sau khi gộp, đánh lại `id` tuần tự và đặt cờ [SEEDED] = true để lần gộp mẫu hệ thống về sau KHÔNG
+     * gieo lại / không đụng vào mẫu người dùng (giống đường [load] đã gieo). KHÔNG chặn tại [MAX] (thà giữ
+     * đủ mẫu người dùng còn hơn nuốt mất — cùng tinh thần với [mergeSystemTemplates]).
+     */
+    fun restore(context: Context, incoming: List<MessageTemplate>, mode: MergeMode): SectionResult {
+        val current = load(context)
+        fun key(t: MessageTemplate) = t.title.trim().lowercase()
+
+        val merged: List<MessageTemplate>
+        val result: SectionResult
+        when (mode) {
+            MergeMode.REPLACE -> {
+                merged = incoming
+                result = SectionResult(added = incoming.size)
+            }
+            MergeMode.ADD -> {
+                val have = current.mapTo(HashSet()) { key(it) }
+                var added = 0
+                var skipped = 0
+                val extra = ArrayList<MessageTemplate>()
+                for (t in incoming) {
+                    if (key(t) in have) {
+                        skipped++
+                    } else {
+                        have.add(key(t)); extra.add(t); added++
+                    }
+                }
+                merged = current + extra
+                result = SectionResult(added = added, skipped = skipped)
+            }
+            MergeMode.UPDATE -> {
+                val byKey = LinkedHashMap<String, MessageTemplate>()
+                current.forEach { byKey[key(it)] = it }
+                var added = 0
+                var updated = 0
+                for (t in incoming) {
+                    val k = key(t)
+                    if (byKey.containsKey(k)) {
+                        byKey[k] = byKey.getValue(k).copy(title = t.title.trim(), content = t.content)
+                        updated++
+                    } else {
+                        byKey[k] = t; added++
+                    }
+                }
+                merged = byKey.values.toList()
+                result = SectionResult(added = added, updated = updated)
+            }
+        }
+
+        val reIded = merged.mapIndexed { i, t -> t.copy(id = i + 1L, title = t.title.trim()) }
+        prefs(context).edit()
+            .putBoolean(SEEDED, true)
+            .putString(KEY, encode(reIded))
+            .apply()
+        return result
     }
 }

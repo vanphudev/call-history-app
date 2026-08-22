@@ -4,7 +4,6 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,6 +16,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -25,8 +26,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -41,12 +46,28 @@ private val SEG_GAP = 4.dp
  * MƯỢT (animate) sang ô đang chọn, chữ ô chọn trắng, ô còn lại [TextSecondary]. Không có hiệu ứng toả.
  * Kiểu thanh tab của màn THỐNG KÊ; tách ra để mọi màn (thống kê, sửa nhóm phân loại…) dùng chung, đồng bộ UI.
  * Hoạt động với số ô bất kỳ (2, 3, …).
+ * [enabled] giữ nguyên lựa chọn đang hiển thị nhưng vô hiệu hoá tương tác và semantics khi control cha đang tắt.
+ * [semanticLabels] cho phép nhãn TalkBack đầy đủ hơn nhãn nhìn thấy ngắn gọn; nếu thiếu hoặc sai kích thước,
+ * component dùng chính [labels] để giữ hành vi tương thích.
  */
 @Composable
-fun Segmented(labels: List<String>, selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
+fun Segmented(
+    labels: List<String>,
+    selected: Int,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    semanticLabels: List<String> = labels,
+) {
     val n = labels.size
     BoxWithConstraints(
-        modifier = modifier.fillMaxWidth().height(40.dp).clip(CircleShape).background(ChipBg).padding(4.dp)
+        modifier = modifier
+            .fillMaxWidth()
+            .height(40.dp)
+            .alpha(if (enabled) 1f else 0.48f)
+            .clip(CircleShape)
+            .background(ChipBg)
+            .padding(4.dp)
     ) {
         // Bề rộng mỗi ô = (bề rộng trong - tổng khe) / số ô. Con trượt trượt theo (ô + khe) × chỉ số đang chọn.
         val segW = (maxWidth - SEG_GAP * (n - 1)) / n
@@ -67,7 +88,7 @@ fun Segmented(labels: List<String>, selected: Int, onSelect: (Int) -> Unit, modi
         )
 
         Row(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().selectableGroup(),
             horizontalArrangement = Arrangement.spacedBy(SEG_GAP),
         ) {
             labels.forEachIndexed { i, label ->
@@ -78,7 +99,17 @@ fun Segmented(labels: List<String>, selected: Int, onSelect: (Int) -> Unit, modi
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .clickable(interactionSource = interaction, indication = null) { onSelect(i) },
+                        .selectable(
+                            selected = sel,
+                            enabled = enabled,
+                            interactionSource = interaction,
+                            indication = null,
+                            role = Role.Tab,
+                            onClick = { onSelect(i) },
+                        )
+                        .semantics {
+                            contentDescription = semanticLabels.getOrNull(i) ?: label
+                        },
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(

@@ -51,6 +51,8 @@ interface AppStrings {
     val theme: ThemeStrings
     val category: CategoryStrings
     val donate: DonateStrings
+    val backup: BackupStrings
+    val blocker: CallBlockStrings
 }
 
 /** Chuỗi DÙNG CHUNG nhiều màn: nhãn điều hướng, nút quyền, và toast của [com.antimobile.callhs.util.CallActions]. */
@@ -149,6 +151,7 @@ interface CallListStrings {
     val voiceUnsupported: String
     val dialpad: String
     val scrollToTop: String
+    val scrollToBottom: String
     val chooseFilter: String
     val selected: String
 
@@ -1100,6 +1103,502 @@ interface CategoryStrings {
     val invalidNumber: String      // số rỗng/ẩn danh không thể thêm vào nhóm
     fun addedTo(name: String): String
     fun removedFrom(name: String): String
+}
+
+/**
+ * Chuỗi màn SAO LƯU & KHÔI PHỤC (BackupScreen) + thẻ mở màn ở Cài đặt.
+ *
+ * Phủ các mảng dữ liệu app tự quản: mẫu tin nhắn, QR, nhóm, bộ chặn, số của tôi và cài đặt hiển thị.
+ * Nhật ký cuộc gọi hệ thống là chỉ-đọc nên không được sao lưu; lịch sử chặn do CallHS tự ghi thì có.
+ */
+interface BackupStrings {
+    // Thẻ ở màn Cài đặt
+    val settingsSection: String
+    val cardTitle: String
+    val cardSubtitle: String
+    val open: String
+
+    // Khung màn
+    val screenTitle: String
+    val callLogNote: String        // ghi chú: lịch sử cuộc gọi không nằm trong sao lưu
+
+    // Khối SAO LƯU (xuất)
+    val backupTitle: String
+    val backupDesc: String
+    val chooseData: String
+    val exportButton: String
+    val exporting: String
+
+    // Khối KHÔI PHỤC (nhập)
+    val restoreTitle: String
+    val restoreDesc: String
+    val pickFileButton: String
+    val pickAnotherButton: String
+    val restoreButton: String
+    val restoring: String
+    val fileLabel: String          // nhãn "File sao lưu"
+    fun fileMeta(date: String, appVersion: String): String
+    val chooseSections: String     // "Chọn phần cần khôi phục"
+
+    // Cách khôi phục (3 chế độ)
+    val modeTitle: String
+    val modeReplace: String
+    val modeReplaceDesc: String
+    val modeAdd: String
+    val modeAddDesc: String
+    val modeUpdate: String
+    val modeUpdateDesc: String
+
+    // Tên 5 mảng dữ liệu + phụ đề
+    val secTemplates: String
+    val secTemplatesSub: String
+    val secQr: String
+    val secQrSub: String
+    val secCategories: String
+    val secCategoriesSub: String
+    val secBlockRules: String
+    val secBlockRulesSub: String
+    val secBlockHistory: String
+    val secBlockHistorySub: String
+    val secMyNumber: String
+    val secMyNumberSub: String
+    val secDisplay: String
+    val secDisplaySub: String
+    fun itemsCount(n: Int): String     // "12 mục"
+
+    // Xác nhận trước khi GHI ĐÈ
+    val confirmReplaceTitle: String
+    val confirmReplaceMessage: String
+
+    // Kết quả
+    val exportOkTitle: String
+    val exportOkMessage: String
+    val resultTitle: String
+    fun resultLine(section: String, added: Int, updated: Int, skipped: Int): String
+    val displayApplied: String     // dòng kết quả cho "Cài đặt hiển thị" khi ĐÃ áp
+    val displayKept: String        // ... khi GIỮ nguyên (chế độ Thêm)
+    val truncatedNote: String
+    val done: String
+
+    // Lỗi
+    val errInvalidFile: String
+    val errWriteFailed: String
+    val errReadFailed: String
+    val errNothingSelected: String
+    val errEmptyBackup: String
+}
+
+/** Chuỗi của mô-đun CHẶN CUỘC GỌI / SPAM. */
+interface CallBlockStrings {
+    // Thẻ Settings
+    val settingsSection: String
+    val settingsTitle: String
+    val settingsSubtitle: String
+    val settingsOpen: String
+
+    // Role Android
+    val screenTitle: String
+    val settingsScreenTitle: String
+    val openSettings: String
+    val featureDetailsAction: String
+    val featureInfoSheetTitle: String
+    val featureInfoAvailabilityNote: String
+    val roleTitle: String
+    val roleBody: String
+    val roleAction: String
+    val roleUnavailableTitle: String
+    val roleUnavailableBody: String
+    val roleActive: String
+
+    // Tổng quan
+    val protectionTitle: String
+    val protectionSubtitle: String
+    val protectionOn: String
+    val protectionOff: String
+    val enableProtectionAction: String
+    val disableProtectionAction: String
+    val pauseTimerTitle: String
+    val pauseTimerOff: String
+    val pauseTimer10Minutes: String
+    val pauseTimer30Minutes: String
+    val pauseTimer1Hour: String
+    val pauseTimerOffExplanation: String
+    val pauseActive: String
+    fun pausePeriod(from: String, to: String): String
+    fun pauseRemaining(countdown: String): String
+    val pauseUnavailableWhileOff: String
+    val dailyScheduleTitle: String
+    fun dailyScheduleCount(count: Int, max: Int): String
+    val dailyScheduleDescription: String
+    val dailyScheduleBaseState: String
+    val dailyScheduleEmpty: String
+    val dailyScheduleAdd: String
+    val dailyScheduleLimitReached: String
+    val dailyScheduleBlock: String
+    val dailySchedulePause: String
+    val dailyScheduleBlockActive: String
+    val dailySchedulePauseActive: String
+    val dailyScheduleTimelineDescription: String
+    val dailyScheduleEditorAddTitle: String
+    val dailyScheduleEditorEditTitle: String
+    val dailyScheduleActionTitle: String
+    val dailySchedulePresetTitle: String
+    val dailyScheduleMorning: String
+    val dailyScheduleAfternoon: String
+    val dailyScheduleEvening: String
+    val dailyScheduleNight: String
+    val dailyScheduleCustom: String
+    val dailyScheduleDaysTitle: String
+    val dailyScheduleEveryDay: String
+    fun dailyScheduleWeekdayShort(day: java.time.DayOfWeek): String
+    fun dailyScheduleToday(day: String): String
+    val dailyScheduleEnabled: String
+    val dailyScheduleDisabled: String
+    val dailyScheduleStartTime: String
+    val dailyScheduleEndTime: String
+    val dailyScheduleTimeConfirm: String
+    val dailyScheduleNextDay: String
+    val dailyScheduleSave: String
+    val dailyScheduleDelete: String
+    val dailyScheduleOverlapTitle: String
+    val dailyScheduleOverlapConfirm: String
+    fun dailyScheduleOverlapError(from: String, to: String): String
+    val dailyScheduleInvalidError: String
+    val dailyScheduleNoDayError: String
+    val dailyScheduleStorageError: String
+    val protectionOffBannerBody: String
+    val protectionPausedBannerBody: String
+    val repeatCallerExceptionTitle: String
+    fun repeatCallerExceptionSubtitle(threshold: Int, minutes: Int): String
+    val repeatCallerExceptionOff: String
+    fun repeatCallerExceptionOn(threshold: Int, minutes: Int): String
+    val repeatCallerThresholdTitle: String
+    fun repeatCallerThresholdOption(threshold: Int): String
+    val repeatCallerWindowTitle: String
+    fun repeatCallerWindowValue(minutes: Int): String
+    val repeatCallerWindowSheetTitle: String
+    fun repeatCallerWindowHint(minMinutes: Int, maxMinutes: Int): String
+    fun repeatCallerWindowInvalid(minMinutes: Int, maxMinutes: Int): String
+    val repeatCallerApply: String
+    val blockMethodTitle: String
+    val blockMethodSubtitle: String
+    val chooseBlockMethod: String
+    val methodBlockAndReject: String
+    val methodBlockAndRejectDesc: String
+    val methodBlockWithoutReject: String
+    val methodBlockWithoutRejectDesc: String
+    val methodSilenceOnly: String
+    val methodSilenceOnlyDesc: String
+    val methodAllow: String
+    val methodAllowDesc: String
+    val notificationTitleSetting: String
+    val notificationSubtitle: String
+    val notificationPermissionNeeded: String
+    val notificationPermissionAction: String
+    val notificationChannelNeedsAttention: String
+    val notificationChannelSettingsAction: String
+    val notificationOff: String
+    val notificationEvery: String
+
+    // Kiến trúc chặn v2: nguồn số tách khỏi quy tắc điều kiện
+    val alwaysAllowTitle: String
+    val alwaysAllowSubtitle: String
+    val alwaysAllowDetails: String
+    val blockedNumbersTitle: String
+    val blockedNumbersSubtitle: String
+    val blockedNumbersDetails: String
+    val groupBlockingTitle: String
+    val groupBlockingSubtitle: String
+    val groupBlockingDetails: String
+    val advancedRulesTitle: String
+    val advancedRulesSubtitle: String
+    val advancedRulesDetails: String
+    fun savedNumberCount(count: Int): String
+    val manageSection: String
+    val allowlistScreenTitle: String
+    val blocklistScreenTitle: String
+    val allowlistEmpty: String
+    val blocklistEmpty: String
+    val addNumber: String
+    val addNumberSourceTitle: String
+    val sourceEnterManually: String
+    val sourceFromContacts: String
+    val sourceFromCallHistory: String
+    val sourceFromCategories: String
+    val enterNumberTitle: String
+    val enterNumberHint: String
+    val enterNumberNameHint: String
+    val addToAllowlist: String
+    val addToBlocklist: String
+    val numberAlreadyExists: String
+    val numberMovedToAllowlist: String
+    val numberMovedToBlocklist: String
+    fun numberAddedAt(time: String): String
+    val menuDeleteNumber: String
+    val menuMoveToAllowlist: String
+    val menuMoveToBlocklist: String
+    val menuEnableNumber: String
+    val menuDisableNumber: String
+    val advancedOrderNote: String
+    val menuMoveRuleUp: String
+    val menuMoveRuleDown: String
+    val menuEnableRule: String
+    val menuDisableRule: String
+    val enableAllAdvancedRules: String
+    val disableAllAdvancedRules: String
+    val deleteAllAdvancedRules: String
+    fun enableAllAdvancedRulesMessage(count: Int): String
+    fun disableAllAdvancedRulesMessage(count: Int): String
+    fun deleteAllAdvancedRulesMessage(count: Int): String
+    val groupScreenTitle: String
+    val blockSavedContactsGroup: String
+    val blockSavedContactsGroupDesc: String
+    val blockUnknownNumbersGroup: String
+    val blockUnknownNumbersGroupDesc: String
+    val unknownPolicyTitle: String
+    val unknownPolicyPass: String
+    val unknownPolicyBlockAlways: String
+    val unknownPolicyBlockUntilRepeat: String
+    val unknownPolicyPassDesc: String
+    val unknownPolicyBlockAlwaysDesc: String
+    val unknownPolicyBlockUntilRepeatDesc: String
+    val specialGroupsTitle: String
+    val advancedRulesScreenTitle: String
+    val advancedRulesEmpty: String
+    val addAdvancedRule: String
+    val ruleScopeLabel: String
+    val scopeUnknown: String
+    val scopeContacts: String
+    val scopeAll: String
+    val scopeUnknownDesc: String
+    val scopeContactsDesc: String
+    val scopeAllDesc: String
+    fun ruleScopeSummary(scope: String): String
+    fun rulePreview(summary: String, scope: String): String
+    val typeLength: String
+    val lengthHint: String
+    val ruleActionLabel: String
+    val actionBlock: String
+    val actionAllow: String
+    val actionBlockDesc: String
+    val actionAllowDesc: String
+    val savedPolicyTitle: String
+    val savedPolicyFollowRules: String
+    val savedPolicyAllow: String
+    val savedPolicyBlock: String
+    val savedPolicyFollowRulesDesc: String
+    val savedPolicyAllowDesc: String
+    val savedPolicyBlockDesc: String
+    val groupPriorityNote: String
+    val processingGuideItemTitle: String
+    val processingGuideItemSubtitle: String
+    val processingGuideSheetTitle: String
+    val processingGuideIntro: String
+    fun processingGuideStepTitle(step: Int): String
+    fun processingGuideStepDescription(step: Int): String
+    val processingGuideConclusion: String
+
+    // Các vấn đề thường gặp / hướng dẫn tự khắc phục
+    val commonIssuesTitle: String
+    val commonIssuesSubtitle: String
+    val commonIssuesIntro: String
+    val commonIssuesPossibleCause: String
+    val commonIssuesHowToFix: String
+    val commonIssuesOpenBlockSettings: String
+    val commonIssuesOpenNotificationSettings: String
+    val commonIssuesExpand: String
+    val commonIssuesCollapse: String
+    fun commonIssueTitle(issue: Int): String
+    fun commonIssueCause(issue: Int): String
+    fun commonIssueFix(issue: Int): String
+
+    // Tabs/list
+    val tabRules: String
+    fun tabHistory(count: Int): String
+    val addRule: String
+    val emptyRules: String
+    val emptyHistory: String
+    fun ruleCount(count: Int): String
+    val ruleEnabledStatus: String
+    val ruleDisabledStatus: String
+    fun blockedCount(count: Int): String
+    fun blockedAt(time: String): String
+    fun matchedRule(rule: String): String
+    fun repeatCallerGuardReason(attempt: Int, threshold: Int, minutes: Int): String
+    fun consecutiveMissed(count: Int): String
+    val menuDeleteRule: String
+    val menuDeleteHistory: String
+
+    // Báo cáo lịch sử chặn
+    val historyPeriodDay: String
+    val historyPeriodWeek: String
+    val historyPeriodMonth: String
+    val historyPickDate: String
+    val historyDateRangeNote: String
+    val historyOverviewTitle: String
+    val historyTotalBlocks: String
+    val historyUniqueNumbers: String
+    val historyPeakHour: String
+    val historyPeakDay: String
+    val historyNoPeak: String
+    val historyActivityTitle: String
+    val historyHourlySubtitle: String
+    val historyDailySubtitle: String
+    val historySwipeChartHint: String
+    fun historyHourBucket(fromHour: Int, toHour: Int): String
+    fun historyDayAxis(day: Int): String
+    fun historyWeekdayAxis(day: java.time.DayOfWeek): String
+    val historyDayPartsTitle: String
+    val historyDayPartsSubtitle: String
+    fun historyDayPartRange(fromHour: Int, toHour: Int): String
+    val historyReasonsTitle: String
+    val historyTopNumbersTitle: String
+    fun historyDetails(count: Int): String
+    fun historyEvents(count: Int): String
+    fun historyRange(from: String, to: String): String
+    fun historyTrendUp(count: Int): String
+    fun historyTrendDown(count: Int): String
+    val historyTrendSame: String
+    val historyNoEventsInPeriod: String
+
+    // Editor
+    val createRuleTitle: String
+    val editRuleTitle: String
+    val save: String
+    val update: String
+    val ruleTypeLabel: String
+    val ruleValueLabel: String
+    val exactValueLabel: String
+    val prefixValueLabel: String
+    val suffixValueLabel: String
+    val containsValueLabel: String
+    val lengthValueLabel: String
+    val numberHint: String
+    val carrierHint: String
+    val chooseRuleType: String
+    val chooseCarrier: String
+    val typeExact: String
+    val typePrefix: String
+    val typeSuffix: String
+    val typeContains: String
+    val typeCarrier: String
+    val typeSpamRisk: String
+    val spamRiskPickerDescription: String
+    val spamRiskDetailsTitle: String
+    val spamRiskPrefixDetail: String
+    val spamRiskUnknownPrefixDetail: String
+    val spamRiskVerificationDetail: String
+    val spamRiskWarning: String
+    fun spamRiskReasonPrefix(prefix: String): String
+    fun spamRiskReasonUnknownMobilePrefix(prefix: String): String
+    val spamRiskReasonVerificationFailed: String
+    val typeSpecial: String
+    val typeContacts: String
+    val typeCallHistory: String
+    val typeCountryAndAreaCode: String
+    val typeBrandName: String
+    val specialTitle: String
+    val specialPrivate: String
+    val specialPrivateDesc: String
+    val specialUnknownContact: String
+    val specialUnknownContactDesc: String
+    val specialVoip: String
+    val specialVoipDesc: String
+    val specialSipPhone: String
+    val specialSipPhoneDesc: String
+    val specialSipText: String
+    val specialSipTextDesc: String
+    val identityTermsTitle: String
+    val learnVoip: String
+    val learnSip: String
+    val learnUri: String
+    val learnCli: String
+    val learnCnam: String
+    val voipExplanation: String
+    val sipExplanation: String
+    val uriExplanation: String
+    val cliExplanation: String
+    val cnamExplanation: String
+    val brandNamePickerTitle: String
+    val brandNamePickerOpen: String
+    val brandNameCaseSensitiveNote: String
+    val brandNameInputHint: String
+    val brandNameAdd: String
+    fun brandNameSelectedCount(count: Int, max: Int): String
+    val brandNameTelecomCategory: String
+    val brandNameBankCategory: String
+    val brandNameWalletCategory: String
+    val brandNameServiceCategory: String
+    val brandNameSpamCategory: String
+    val brandNameSpamDisclaimer: String
+    val brandNameAndroidLimit: String
+    val specialAndroidLimit: String
+    val contactPickerTitle: String
+    val contactPickerOpen: String
+    val contactPickerSearchHint: String
+    val contactPickerPermissionTitle: String
+    val contactPickerPermissionBody: String
+    val contactPickerPermissionAction: String
+    fun contactPickerSelectedCount(count: Int): String
+    val contactPickerDone: String
+    val contactPickerEmpty: String
+    val contactPickerNoResults: String
+    val callHistoryPickerTitle: String
+    val callHistoryPickerOpen: String
+    val callHistoryPickerSearchHint: String
+    fun callHistoryPickerSelectedCount(count: Int): String
+    val callHistoryPickerEmpty: String
+    val callHistoryPickerNoResults: String
+    val callHistoryPickerPreviouslySelected: String
+    val callHistoryPickerPreviouslySelectedNote: String
+    val validationSelectSpecial: String
+    val validationSelectBrandName: String
+    val validationSelectContact: String
+    val validationSelectCallHistory: String
+    val regionPickerTitle: String
+    val regionInternationalSection: String
+    val regionVietnamPrefixSection: String
+    val regionAllInternationalExceptVietnam: String
+    val regionAllInternationalExceptVietnamDesc: String
+    val regionChina: String
+    val regionCambodia: String
+    val regionMyanmar: String
+    val regionNanpShared: String
+    val regionGermany: String
+    val regionLaos: String
+    val regionThailand: String
+    val regionMalaysia: String
+    val regionSingapore: String
+    val regionIndonesia: String
+    val regionPhilippines: String
+    val regionIndia: String
+    val regionPrefix024: String
+    val regionPrefix022: String
+    val regionPrefix028: String
+    val regionPrefix059: String
+    val regionPrefix099: String
+    val regionCallerIdWarning: String
+    val validationSelectRegion: String
+    val invalidRule: String
+    val duplicateRule: String
+    val maxRules: String
+    val discardTitle: String
+    val discardMessage: String
+    val discardStay: String
+    val discardExit: String
+
+    /** [type] là storage key ổn định: exact/prefix/...; [value] là snapshot từ dữ liệu. */
+    fun ruleSummary(type: String, value: String): String
+    fun specialSummary(value: String): String
+    fun contactsSummary(value: String): String
+    fun callHistorySummary(value: String): String
+    fun regionSummary(value: String): String
+
+    // Notification thực tế
+    val notificationChannelName: String
+    val notificationChannelDescription: String
+    fun notificationTitle(number: String): String
+    fun notificationBody(total: Int, rule: String): String
 }
 
 /** Chuỗi hiện hành theo ngôn ngữ đang chọn. Dùng được TRONG và NGOÀI @Composable (xem [AppStrings]). */

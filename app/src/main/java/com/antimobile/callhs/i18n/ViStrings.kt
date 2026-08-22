@@ -1,5 +1,10 @@
 package com.antimobile.callhs.i18n
 
+import com.antimobile.callhs.data.blocking.ContactRuleCodec
+import com.antimobile.callhs.data.blocking.CallHistoryRuleCodec
+import com.antimobile.callhs.data.blocking.BrandNameRuleCodec
+import com.antimobile.callhs.data.blocking.GeographicBlockOption
+import com.antimobile.callhs.data.blocking.SpecialCallCondition
 import java.time.DayOfWeek
 
 /** Bảng chuỗi TIẾNG VIỆT — nguyên văn thiết kế gốc của app (nguồn dịch cho [EnStrings]). */
@@ -37,6 +42,8 @@ object ViStrings : AppStrings {
     override val theme: ThemeStrings = Theme
     override val category: CategoryStrings = Category
     override val donate: DonateStrings = Donate
+    override val backup: BackupStrings = Backup
+    override val blocker: CallBlockStrings = Blocker
 
     private object Common : CommonStrings {
         override val back = "Quay lại"
@@ -126,6 +133,7 @@ object ViStrings : AppStrings {
         override val voiceUnsupported = "Thiết bị không hỗ trợ tìm bằng giọng nói"
         override val dialpad = "Bàn phím"
         override val scrollToTop = "Lên đầu danh sách"
+        override val scrollToBottom = "Xuống cuối danh sách"
         override val chooseFilter = "Chọn bộ lọc"
         override val selected = "Đang chọn"
 
@@ -799,12 +807,13 @@ object ViStrings : AppStrings {
         override val simBullet2 = "Tính nội / ngoại mạng để ước tính cước gọi"
         override val simBullet3 = "Chỉ dùng để tính toán trên máy, không gửi đi"
         override val contactsStep = "Danh bạ"
-        override val contactsHeadline = "Hiện tên người liên hệ"
+        override val contactsHeadline = "Sàng lọc cả số trong danh bạ"
         override val contactsDesc =
-            "CallHS đọc danh bạ để thay số điện thoại bằng TÊN và ảnh đại diện đã lưu, giúp bạn nhận ra " +
-                "ngay ai đã gọi. Ứng dụng chỉ đọc, không thêm / sửa / xoá danh bạ."
-        override val contactsBullet1 = "Hiện tên & ảnh liên hệ thay cho số lạ"
-        override val contactsBullet2 = "Dễ nhận ra ai đã gọi trong danh sách"
+            "Android chỉ chuyển cuộc gọi từ số đã lưu tới CallHS khi quyền Danh bạ còn hiệu lực. " +
+                "CallHS dùng quyền này để áp dụng đầy đủ quy tắc chặn và hiển thị tên, ảnh; ứng dụng " +
+                "chỉ đọc, không sửa hoặc gửi danh bạ."
+        override val contactsBullet1 = "Áp dụng quy tắc chặn cho cả số đã lưu trong danh bạ"
+        override val contactsBullet2 = "Hiển thị tên và ảnh trong lịch sử cuộc gọi"
         override val contactsBullet3 = "Chỉ ĐỌC danh bạ — không sửa, không gửi đi"
         override fun stepIndicator(current: Int, total: Int, title: String) = "Bước $current/$total · $title"
         override val deniedMessage = "Bạn đã từ chối quyền này. Vui lòng bật thủ công trong Cài đặt để tiếp tục."
@@ -979,5 +988,680 @@ object ViStrings : AppStrings {
         override val footerMessage =
             "Đây là khoản đóng góp tự nguyện dành cho nhà phát triển, không phải phí bắt buộc và không đổi lấy bất kỳ tính năng nào. CallHS vẫn luôn miễn phí. Xin chân thành cảm ơn sự ủng hộ của bạn."
         override val thankYou = "Cảm ơn bạn rất nhiều ❤️"
+    }
+
+    private object Blocker : CallBlockStrings {
+        override val settingsSection = "Chặn cuộc gọi"
+        override val settingsTitle = "Chặn cuộc gọi & spam"
+        override val settingsSubtitle = "Quy tắc chặn, lịch sử và thông báo"
+        override val settingsOpen = "Mở chặn cuộc gọi"
+
+        override val screenTitle = "Chặn cuộc gọi"
+        override val settingsScreenTitle = "Cài đặt chặn cuộc gọi"
+        override val openSettings = "Mở cài đặt chặn cuộc gọi"
+        override val featureDetailsAction = "Xem chi tiết tính năng"
+        override val featureInfoSheetTitle = "Thông tin tính năng chặn"
+        override val featureInfoAvailabilityNote =
+            "Chỉ áp dụng cho cuộc gọi đến khi CallHS đang là ứng dụng sàng lọc, Bảo vệ cuộc gọi đang bật và không trong thời gian tạm dừng."
+        override val roleTitle = "Bật chặn cuộc gọi"
+        override val roleBody =
+            "Android yêu cầu bạn chọn CallHS làm ứng dụng sàng lọc cuộc gọi. CallHS chỉ sàng lọc cuộc gọi đến, không thay ứng dụng gọi điện mặc định của máy."
+        override val roleAction = "Chọn CallHS để chặn spam"
+        override val roleUnavailableTitle = "Thiết bị chưa hỗ trợ"
+        override val roleUnavailableBody = "Thiết bị này không cung cấp vai trò sàng lọc cuộc gọi của Android."
+        override val roleActive = "CallHS đang là ứng dụng sàng lọc cuộc gọi"
+
+        override val protectionTitle = "Bảo vệ cuộc gọi"
+        override val protectionSubtitle =
+            "Trong thời gian tạm dừng, mọi cuộc gọi đều được cho qua; quy tắc và các thiết lập bảo vệ vẫn được giữ nguyên rồi tự hoạt động lại khi hết giờ."
+        override val protectionOn = "Đang sàng lọc cuộc gọi"
+        override val protectionOff = "Đang tắt bảo vệ"
+        override val enableProtectionAction = "Bật chặn cuộc gọi"
+        override val disableProtectionAction = "Tắt chặn cuộc gọi"
+        override val pauseTimerTitle = "Hẹn giờ tạm dừng"
+        override val pauseTimerOff = "Tắt"
+        override val pauseTimer10Minutes = "10p"
+        override val pauseTimer30Minutes = "30p"
+        override val pauseTimer1Hour = "1h"
+        override val pauseTimerOffExplanation =
+            "“Tắt” chỉ huỷ hẹn giờ; bảo vệ vẫn hoạt động khi công tắc chính đang bật."
+        override val pauseActive = "Đang tạm dừng theo hẹn giờ"
+        override fun pausePeriod(from: String, to: String) = "$from → $to"
+        override fun pauseRemaining(countdown: String) = "Còn lại $countdown"
+        override val pauseUnavailableWhileOff = "Bật bảo vệ để dùng hẹn giờ tạm dừng."
+        override val dailyScheduleTitle = "Lịch chặn & ngưng"
+        override fun dailyScheduleCount(count: Int, max: Int) = "$count/$max khung giờ"
+        override val dailyScheduleDescription =
+            "Lặp lại vào các thứ đã chọn. Trong khung Chặn, CallHS bật bảo vệ; trong khung Ngưng, mọi cuộc gọi được cho qua."
+        override val dailyScheduleBaseState = "Ngoài các khung giờ, trạng thái theo công tắc Bảo vệ cuộc gọi."
+        override val dailyScheduleEmpty = "Chưa có khung giờ. Chọn một mẫu hoặc tự đặt giờ."
+        override val dailyScheduleAdd = "Thêm khung giờ"
+        override val dailyScheduleLimitReached = "Đã đạt giới hạn 4 khung giờ."
+        override val dailyScheduleBlock = "Chặn"
+        override val dailySchedulePause = "Ngưng"
+        override val dailyScheduleBlockActive = "Đang chặn theo lịch"
+        override val dailySchedulePauseActive = "Đang ngưng theo lịch"
+        override val dailyScheduleTimelineDescription = "Biểu đồ lịch chặn và ngưng trong 24 giờ"
+        override val dailyScheduleEditorAddTitle = "Thêm lịch trong ngày"
+        override val dailyScheduleEditorEditTitle = "Sửa lịch trong ngày"
+        override val dailyScheduleActionTitle = "Trong khung giờ này"
+        override val dailySchedulePresetTitle = "Chọn nhanh"
+        override val dailyScheduleMorning = "Sáng"
+        override val dailyScheduleAfternoon = "Chiều"
+        override val dailyScheduleEvening = "Tối"
+        override val dailyScheduleNight = "Đêm"
+        override val dailyScheduleCustom = "Tự đặt giờ"
+        override val dailyScheduleDaysTitle = "Ngày áp dụng"
+        override val dailyScheduleEveryDay = "Hằng ngày"
+        override fun dailyScheduleWeekdayShort(day: java.time.DayOfWeek) = when (day) {
+            java.time.DayOfWeek.MONDAY -> "T2"
+            java.time.DayOfWeek.TUESDAY -> "T3"
+            java.time.DayOfWeek.WEDNESDAY -> "T4"
+            java.time.DayOfWeek.THURSDAY -> "T5"
+            java.time.DayOfWeek.FRIDAY -> "T6"
+            java.time.DayOfWeek.SATURDAY -> "T7"
+            java.time.DayOfWeek.SUNDAY -> "CN"
+        }
+        override fun dailyScheduleToday(day: String) = "Hôm nay · $day"
+        override val dailyScheduleEnabled = "Đang bật"
+        override val dailyScheduleDisabled = "Đang tắt"
+        override val dailyScheduleStartTime = "Bắt đầu"
+        override val dailyScheduleEndTime = "Kết thúc"
+        override val dailyScheduleTimeConfirm = "Xong"
+        override val dailyScheduleNextDay = "sang hôm sau"
+        override val dailyScheduleSave = "Lưu khung giờ"
+        override val dailyScheduleDelete = "Xoá khung giờ"
+        override val dailyScheduleOverlapTitle = "Lịch bị chồng lấn"
+        override val dailyScheduleOverlapConfirm = "Đã hiểu"
+        override fun dailyScheduleOverlapError(from: String, to: String) =
+            "Khung giờ này chồng lấn với lịch $from–$to. Hãy chọn giờ khác."
+        override val dailyScheduleInvalidError = "Giờ bắt đầu và kết thúc phải khác nhau."
+        override val dailyScheduleNoDayError = "Hãy chọn ít nhất một ngày áp dụng."
+        override val dailyScheduleStorageError = "Không lưu được lịch. Vui lòng thử lại."
+        override val protectionOffBannerBody =
+            "Quy tắc và các thiết lập vẫn được lưu nhưng hiện không sàng lọc cuộc gọi. Nhấn nút đỏ bên dưới để bật lại bảo vệ."
+        override val protectionPausedBannerBody =
+            "Mọi cuộc gọi đang được cho qua; các tính năng bảo vệ sẽ tự hoạt động lại khi hết thời gian."
+        override val repeatCallerExceptionTitle = "Cho phép số lạ gọi lặp"
+        override fun repeatCallerExceptionSubtitle(threshold: Int, minutes: Int) =
+            "Cơ chế này chỉ áp dụng khi CallHS xác nhận số nằm ngoài danh bạ và cuộc gọi không khớp bất kỳ quy tắc nào. Các lượt trước ngưỡng $threshold được xử lý theo Phương thức xử lý đã chọn: hai chế độ Chặn ghi lịch sử và thông báo theo cài đặt; Chỉ tắt tiếng chỉ tắt chuông, không ghi lịch sử chặn; Bỏ qua cho phép mọi cuộc gọi đi qua và không đếm lượt. Khi có đủ $threshold lượt trong cửa sổ $minutes phút gần nhất, cuộc hiện tại và các cuộc tiếp theo được cho qua miễn cửa sổ trượt vẫn đủ ngưỡng. Nếu số đã khớp quy tắc, cơ chế gọi lặp không được xét và không ghi đè kết quả. Ngoại lệ danh bạ vẫn áp dụng riêng cho quy tắc diện rộng. Riêng khi xét cơ chế gọi lặp này, nếu CallHS không thể xác minh danh bạ, cuộc gọi được cho qua để tránh chặn nhầm."
+        override val repeatCallerExceptionOff = "Cơ chế số lạ gọi lặp đang tắt"
+        override fun repeatCallerExceptionOn(threshold: Int, minutes: Int) =
+            "Trước lượt $threshold: theo phương thức đã chọn · Từ lượt $threshold: cho qua trong $minutes phút"
+        override val repeatCallerThresholdTitle = "Ngưỡng bắt đầu cho qua"
+        override fun repeatCallerThresholdOption(threshold: Int) = "Cho qua từ lượt thứ $threshold"
+        override val repeatCallerWindowTitle = "Cửa sổ đếm cuộc gọi"
+        override fun repeatCallerWindowValue(minutes: Int) = "$minutes phút"
+        override val repeatCallerWindowSheetTitle = "Cửa sổ đếm số lạ gọi lặp"
+        override fun repeatCallerWindowHint(minMinutes: Int, maxMinutes: Int) =
+            "Nhập cửa sổ từ $minMinutes đến $maxMinutes phút"
+        override fun repeatCallerWindowInvalid(minMinutes: Int, maxMinutes: Int) =
+            "Hãy nhập cửa sổ từ $minMinutes đến $maxMinutes phút."
+        override val repeatCallerApply = "Áp dụng"
+        override val blockMethodTitle = "Phương thức xử lý"
+        override val blockMethodSubtitle =
+            "Chọn cách CallHS xử lý khi cuộc gọi khớp quy tắc hoặc bị cổng bảo vệ số lạ giữ lại trước ngưỡng."
+        override val chooseBlockMethod = "Chọn phương thức xử lý"
+        override val methodBlockAndReject = "Chặn và ngắt cuộc gọi"
+        override val methodBlockAndRejectDesc = "Không cho cuộc gọi đi qua và gửi tín hiệu từ chối tới người gọi."
+        override val methodBlockWithoutReject = "Chặn mà không từ chối"
+        override val methodBlockWithoutRejectDesc = "Không cho cuộc gọi đi qua nhưng không chủ động gửi tín hiệu từ chối."
+        override val methodSilenceOnly = "Chỉ tắt tiếng"
+        override val methodSilenceOnlyDesc = "Cuộc gọi vẫn xuất hiện nhưng thiết bị không đổ chuông."
+        override val methodAllow = "Bỏ qua"
+        override val methodAllowDesc =
+            "Cho phép mọi cuộc gọi đi qua. Quy tắc vẫn được lưu nhưng không được áp dụng, và cơ chế số lạ gọi lặp không đếm lượt cho tới khi chọn phương thức khác."
+        override val notificationTitleSetting = "Thông báo cuộc gọi bị chặn"
+        override val notificationSubtitle = "Bật hoặc tắt cảnh báo âm thanh mỗi khi CallHS chặn cuộc gọi."
+        override val notificationPermissionNeeded = "Cần cho phép thông báo trong Android để nhận cảnh báo."
+        override val notificationPermissionAction = "Cho phép thông báo"
+        override val notificationChannelNeedsAttention =
+            "Kênh cảnh báo đang bị tắt, tắt âm thanh hoặc chưa ở mức Khẩn cấp để hiện heads-up."
+        override val notificationChannelSettingsAction = "Mở cài đặt kênh"
+        override val notificationOff = "Tắt thông báo"
+        override val notificationEvery = "Thông báo mỗi lần chặn"
+
+        override val alwaysAllowTitle = "Danh sách cho phép"
+        override val alwaysAllowSubtitle = "Các số trong danh sách này luôn được cho qua trước tiên."
+        override val alwaysAllowDetails =
+            "Thêm số bằng cách nhập tay, chọn từ Danh bạ, Lịch sử cuộc gọi hoặc Phân loại nhóm. Khi một số trong danh sách này gọi đến, CallHS cho qua ngay.\n\n" +
+                "Danh sách cho phép luôn được kiểm tra đầu tiên. Nguồn chọn chỉ giúp lấy số và không tự cập nhật khi liên hệ thay đổi."
+        override val blockedNumbersTitle = "Danh sách chặn"
+        override val blockedNumbersSubtitle = "Các số cụ thể sẽ bị chặn khi gọi đến."
+        override val blockedNumbersDetails =
+            "Thêm số bằng cách nhập tay, chọn từ Danh bạ, Lịch sử cuộc gọi hoặc Phân loại nhóm. Khi một số trong danh sách này gọi đến, CallHS áp dụng phương thức chặn bạn đã chọn.\n\n" +
+                "Danh sách chặn được kiểm tra sau Danh sách cho phép và trước mọi lựa chọn khác."
+        override val groupBlockingTitle = "Xử lý theo danh bạ"
+        override val groupBlockingSubtitle = "Chọn cách xử lý số trong danh bạ và số ngoài danh bạ."
+        override val groupBlockingDetails =
+            "Chọn cách CallHS xử lý số đã lưu trong danh bạ và số ngoài danh bạ. Mỗi lựa chọn đều ghi rõ cuộc gọi sẽ được cho qua, bị chặn hay tiếp tục xét theo Quy tắc nâng cao.\n\n" +
+                "Danh sách cho phép và Danh sách chặn luôn được kiểm tra trước. Chế độ gọi lặp chỉ chạy khi không có quy tắc nào khớp."
+        override val advancedRulesTitle = "Quy tắc nâng cao"
+        override val advancedRulesSubtitle = "Bộ lọc dấu hiệu spam, mẫu số, nhà mạng, khu vực và loại đặc biệt."
+        override val advancedRulesDetails =
+            "Dùng bộ lọc cuộc gọi có dấu hiệu spam hoặc tạo điều kiện theo đầu số, đuôi số, chuỗi số, độ dài, nhà mạng, khu vực hay loại cuộc gọi. Mỗi quy tắc có thể áp dụng cho số trong danh bạ, ngoài danh bạ hoặc tất cả.\n\n" +
+                "CallHS xét các quy tắc đang bật từ trên xuống và áp dụng quy tắc đầu tiên khớp."
+        override fun savedNumberCount(count: Int) = "$count số"
+        override val manageSection = "Quản lý chặn cuộc gọi"
+        override val allowlistScreenTitle = "Danh sách cho phép"
+        override val blocklistScreenTitle = "Danh sách chặn"
+        override val allowlistEmpty = "Danh sách cho phép đang trống."
+        override val blocklistEmpty = "Danh sách chặn đang trống."
+        override val addNumber = "Thêm số"
+        override val addNumberSourceTitle = "Chọn nguồn số"
+        override val sourceEnterManually = "Nhập số thủ công"
+        override val sourceFromContacts = "Chọn từ danh bạ"
+        override val sourceFromCallHistory = "Chọn từ lịch sử cuộc gọi"
+        override val sourceFromCategories = "Chọn từ phân loại nhóm"
+        override val enterNumberTitle = "Thêm số điện thoại"
+        override val enterNumberHint = "Số điện thoại"
+        override val enterNumberNameHint = "Tên gợi nhớ (không bắt buộc)"
+        override val addToAllowlist = "Thêm vào Danh sách cho phép"
+        override val addToBlocklist = "Thêm vào danh sách chặn"
+        override val numberAlreadyExists = "Số này đã có trong danh sách."
+        override val numberMovedToAllowlist = "Đã chuyển số sang Danh sách cho phép."
+        override val numberMovedToBlocklist = "Đã chuyển số sang danh sách chặn."
+        override fun numberAddedAt(time: String) = "Đã thêm lúc $time"
+        override val menuDeleteNumber = "Xoá số khỏi danh sách"
+        override val menuMoveToAllowlist = "Chuyển sang Danh sách cho phép"
+        override val menuMoveToBlocklist = "Chuyển sang danh sách chặn"
+        override val menuEnableNumber = "Bật số này"
+        override val menuDisableNumber = "Tắt số này"
+        override val advancedOrderNote = "Quy tắc đầu tiên khớp sẽ được áp dụng. Nhấn giữ một quy tắc để đổi thứ tự."
+        override val menuMoveRuleUp = "Đưa quy tắc lên"
+        override val menuMoveRuleDown = "Đưa quy tắc xuống"
+        override val menuEnableRule = "Bật quy tắc"
+        override val menuDisableRule = "Tắt quy tắc"
+        override val enableAllAdvancedRules = "Bật tất cả quy tắc"
+        override val disableAllAdvancedRules = "Tắt tất cả quy tắc"
+        override val deleteAllAdvancedRules = "Xoá tất cả quy tắc"
+        override fun enableAllAdvancedRulesMessage(count: Int) =
+            "Bật toàn bộ $count quy tắc nâng cao. Các quy tắc sẽ được áp dụng lại theo thứ tự hiện tại khi Bảo vệ cuộc gọi hoạt động."
+        override fun disableAllAdvancedRulesMessage(count: Int) =
+            "Tắt toàn bộ $count quy tắc nâng cao. Quy tắc vẫn được lưu để bật lại; các danh sách số và xử lý theo danh bạ không bị ảnh hưởng."
+        override fun deleteAllAdvancedRulesMessage(count: Int) =
+            "Xoá vĩnh viễn toàn bộ $count quy tắc nâng cao. Thao tác này không thể hoàn tác; các danh sách số và lịch sử chặn không bị xoá."
+        override val groupScreenTitle = "Xử lý theo danh bạ"
+        override val blockSavedContactsGroup = "Chặn toàn bộ số trong danh bạ"
+        override val blockSavedContactsGroupDesc = "Áp dụng với mọi số đã lưu, trừ số trong Danh sách cho phép."
+        override val blockUnknownNumbersGroup = "Xử lý số ngoài danh bạ"
+        override val blockUnknownNumbersGroupDesc = "Chọn cho qua, luôn chặn, hoặc chặn tới khi số gọi lặp đạt ngưỡng."
+        override val unknownPolicyTitle = "Ngoài danh bạ"
+        override val unknownPolicyPass = "Cho qua nếu không khớp quy tắc"
+        override val unknownPolicyBlockAlways = "Chặn toàn bộ"
+        override val unknownPolicyBlockUntilRepeat = "Chặn đến khi gọi lặp"
+        override val unknownPolicyPassDesc = "CallHS vẫn xét Danh sách chặn và Quy tắc nâng cao. Nếu không có gì khớp, cuộc gọi được cho qua."
+        override val unknownPolicyBlockAlwaysDesc = "Mọi số được xác nhận là ngoài danh bạ sẽ bị chặn, trừ số có trong Danh sách cho phép."
+        override val unknownPolicyBlockUntilRepeatDesc = "Nếu không khớp quy tắc nào, CallHS chặn các lần gọi đầu và cho qua khi số đó gọi lặp đạt ngưỡng trong thời gian đã đặt."
+        override val specialGroupsTitle = "Loại cuộc gọi đặc biệt"
+        override val advancedRulesScreenTitle = "Quy tắc nâng cao"
+        override val advancedRulesEmpty = "Chưa có quy tắc nâng cao."
+        override val addAdvancedRule = "Thêm quy tắc nâng cao"
+        override val ruleScopeLabel = "Kiểm tra số nào?"
+        override val scopeUnknown = "Số chưa lưu"
+        override val scopeContacts = "Số đã lưu"
+        override val scopeAll = "Mọi số"
+        override val scopeUnknownDesc = "Chỉ kiểm tra số chưa lưu trong danh bạ."
+        override val scopeContactsDesc = "Chỉ kiểm tra số đã lưu trong danh bạ."
+        override val scopeAllDesc = "Kiểm tra cả số đã lưu và chưa lưu."
+        override fun ruleScopeSummary(scope: String) = when (scope) {
+            "saved_contact" -> scopeContacts
+            "not_saved" -> scopeUnknown
+            else -> scopeAll
+        }
+        override fun rulePreview(summary: String, scope: String) = "Chặn · $scope · $summary"
+        override val typeLength = "Số có bao nhiêu chữ số"
+        override val lengthHint = "Ví dụ: 10"
+        override val ruleActionLabel = "CallHS sẽ làm gì?"
+        override val actionBlock = "Chặn"
+        override val actionAllow = "Cho qua"
+        override val actionBlockDesc = "Chặn theo cách đã chọn trong Cài đặt chặn cuộc gọi."
+        override val actionAllowDesc = "Cho cuộc gọi đi qua."
+        override val savedPolicyTitle = "Trong danh bạ"
+        override val savedPolicyFollowRules = "Áp dụng theo quy tắc"
+        override val savedPolicyAllow = "Luôn cho qua"
+        override val savedPolicyBlock = "Chặn toàn bộ"
+        override val savedPolicyFollowRulesDesc = "Lựa chọn này sẽ được tiếp tục xét theo Quy tắc nâng cao."
+        override val savedPolicyAllowDesc = "Mọi số đã lưu trong danh bạ sẽ được cho qua, trừ số có trong Danh sách chặn."
+        override val savedPolicyBlockDesc = "Mọi số đã lưu trong danh bạ sẽ bị chặn, trừ số có trong Danh sách cho phép."
+        override val groupPriorityNote = "Danh sách cho phép và Danh sách chặn luôn được xét trước các lựa chọn tại đây."
+        override val processingGuideItemTitle = "Tìm hiểu cách CallHS chặn cuộc gọi"
+        override val processingGuideItemSubtitle = "Xem thứ tự CallHS kiểm tra và xử lý một cuộc gọi đến."
+        override val processingGuideSheetTitle = "Cách CallHS xử lý cuộc gọi"
+        override val processingGuideIntro = "CallHS kiểm tra lần lượt theo thứ tự dưới đây và dừng ngay khi đã có kết quả."
+        override fun processingGuideStepTitle(step: Int) = when (step) {
+            1 -> "Kiểm tra bảo vệ cuộc gọi"
+            2 -> "Kiểm tra Danh sách cho phép"
+            3 -> "Kiểm tra Danh sách chặn"
+            4 -> "Xử lý theo danh bạ"
+            5 -> "Kiểm tra Quy tắc nâng cao"
+            else -> "Áp dụng kết quả mặc định"
+        }
+        override fun processingGuideStepDescription(step: Int) = when (step) {
+            1 -> "Nếu bảo vệ đang tắt hoặc tạm dừng, mọi cuộc gọi đều được cho qua."
+            2 -> "Số có trong Danh sách cho phép được cho qua ngay."
+            3 -> "Nếu số có trong Danh sách chặn, cuộc gọi sẽ bị chặn."
+            4 -> "CallHS áp dụng lựa chọn dành cho số trong hoặc ngoài danh bạ. Chọn Áp dụng theo quy tắc để tiếp tục bước kế tiếp."
+            5 -> "CallHS xét từ trên xuống. Quy tắc đầu tiên khớp sẽ được áp dụng."
+            else -> "Nếu không có danh sách hay quy tắc nào khớp, cuộc gọi được cho qua. Chế độ gọi lặp chỉ áp dụng ở bước cuối cho số ngoài danh bạ."
+        }
+        override val processingGuideConclusion = "Danh sách cho phép luôn có ưu tiên cao nhất."
+
+        override val commonIssuesTitle = "Các vấn đề thường gặp"
+        override val commonIssuesSubtitle =
+            "Nguyên nhân và cách xử lý khi chặn cuộc gọi hoặc thông báo hoạt động chưa đúng."
+        override val commonIssuesIntro =
+            "Chọn vấn đề bạn đang gặp. Hãy kiểm tra các nguyên nhân theo thứ tự trước khi thay đổi quy tắc."
+        override val commonIssuesPossibleCause = "Nguyên nhân có thể"
+        override val commonIssuesHowToFix = "Cách khắc phục"
+        override val commonIssuesOpenBlockSettings = "Mở cài đặt chặn cuộc gọi"
+        override val commonIssuesOpenNotificationSettings = "Mở cài đặt thông báo Android"
+        override val commonIssuesExpand = "Xem nguyên nhân và cách khắc phục"
+        override val commonIssuesCollapse = "Thu gọn hướng dẫn"
+        override fun commonIssueTitle(issue: Int) = when (issue) {
+            1 -> "Chặn cuộc gọi không hoạt động"
+            2 -> "Một số cuộc gọi vẫn lọt qua"
+            3 -> "Số quan trọng hoặc số trong danh bạ bị chặn nhầm"
+            4 -> "Không thấy thông báo sau khi chặn"
+            5 -> "Thông báo không có âm thanh, rung hoặc cửa sổ nổi"
+            6 -> "Không thấy cuộc gọi trong Lịch sử chặn"
+            else -> "Không chặn được số ẩn, VoIP hoặc tên thương hiệu"
+        }
+        override fun commonIssueCause(issue: Int) = when (issue) {
+            1 -> "CallHS có thể không còn là ứng dụng sàng lọc cuộc gọi; Bảo vệ cuộc gọi đang tắt, tạm dừng hoặc nằm trong khung giờ tạm dừng. Sau khi buộc dừng ứng dụng, hoặc trước lần mở khóa đầu tiên sau khi khởi động lại, Android cũng có thể chưa chuyển cuộc gọi cho CallHS."
+            2 -> "Số gọi đến có thể nằm trong Danh sách cho phép, được lựa chọn xử lý theo danh bạ hoặc quy tắc đầu tiên cho qua, hay đã đạt ngưỡng gọi lặp. Phương thức Chỉ tắt tiếng và Bỏ qua cũng không từ chối cuộc gọi."
+            3 -> "Danh sách chặn được kiểm tra trước cách xử lý theo danh bạ. Một Quy tắc nâng cao áp dụng cho số đã lưu hoặc mọi số cũng có thể khớp và chặn liên hệ đó."
+            4 -> "Thông báo có thể đang tắt trong CallHS, bị tắt ở khung giờ hiện tại, chưa được Android cấp quyền, hoặc kênh thông báo đã bị tắt. Chỉ cuộc gọi thực sự bị chặn mới tạo thông báo; Chỉ tắt tiếng và Bỏ qua không tạo cảnh báo chặn."
+            5 -> "Âm thanh, rung hoặc kiểu hiển thị có thể đang tắt trong Cài đặt thông báo nâng cao. Chế độ Không làm phiền, mức ưu tiên của kênh và cài đặt thông báo riêng của hãng điện thoại cũng có thể hạn chế cảnh báo."
+            6 -> "Lịch sử của CallHS chỉ ghi cuộc gọi thực sự bị chặn. Cuộc gọi được cho qua hoặc chỉ tắt tiếng không được ghi tại đây; Lịch sử chặn cũng không phải là bản sao Nhật ký cuộc gọi của Android."
+            else -> "Android chuẩn thường chỉ chuyển cho ứng dụng sàng lọc những cuộc gọi có số điện thoại hiển thị hợp lệ. Số ẩn/không khả dụng, cuộc gọi VoIP/SIP và tên thương hiệu phụ thuộc ứng dụng Điện thoại cùng phần mở rộng của từng hãng máy nên có thể không tới CallHS."
+        }
+        override fun commonIssueFix(issue: Int) = when (issue) {
+            1 -> "Mở lại CallHS, cấp lại quyền chặn cuộc gọi và bật Bảo vệ cuộc gọi. Kiểm tra lịch bật/tạm dừng; sau khi khởi động lại hãy mở khóa thiết bị ít nhất một lần."
+            2 -> "Kiểm tra Danh sách cho phép, xử lý theo danh bạ, quy tắc đầu tiên khớp và cấu hình gọi lặp. Trong Phương thức xử lý, chọn một trong hai chế độ Chặn nếu bạn muốn Android ngăn cuộc gọi."
+            3 -> "Thêm số vào Danh sách cho phép — danh sách này có ưu tiên cao nhất. Sau đó kiểm tra các quy tắc đang bật và phạm vi Số đã lưu/Mọi số để tránh chặn rộng hơn dự định."
+            4 -> "Chọn Thông báo mỗi lần chặn, kiểm tra lịch thông báo nâng cao, rồi cho phép thông báo và bật kênh cảnh báo của CallHS trong Android."
+            5 -> "Kiểm tra âm thanh, rung và kiểu hiển thị trong Cài đặt thông báo nâng cao. Sau đó mở cài đặt kênh của Android, bật âm thanh/cửa sổ nổi và kiểm tra chế độ Không làm phiền."
+            6 -> "Chọn một phương thức Chặn, mở tab Lịch sử và chọn đúng ngày hoặc khoảng thời gian. Đối chiếu Nhật ký cuộc gọi hệ thống nếu bạn cần xem cả cuộc gọi được cho qua."
+            else -> "Không thể bảo đảm chặn các cuộc gọi mà Android không chuyển cho CallHS. Với số có hiển thị, hãy thêm số đó vào Danh sách chặn; với số ẩn hoặc VoIP, kiểm tra thêm tính năng chặn của ứng dụng Điện thoại và nhà mạng."
+        }
+
+        override val tabRules = "Quy tắc chặn"
+        override fun tabHistory(count: Int) = "Lịch sử ($count)"
+        override val addRule = "Thêm quy tắc chặn"
+        override val emptyRules =
+            "Chưa có quy tắc nâng cao. Danh sách cho phép, Danh sách chặn và Xử lý theo danh bạ được quản lý ở các mục riêng."
+        override val emptyHistory = "Chưa có cuộc gọi nào bị chặn. Lịch sử sẽ xuất hiện tại đây sau khi CallHS chặn."
+        override fun ruleCount(count: Int) = "$count quy tắc đang lưu"
+        override val ruleEnabledStatus = "Đang áp dụng"
+        override val ruleDisabledStatus = "Đang tắt"
+        override fun blockedCount(count: Int) = "Đã chặn $count lần"
+        override fun blockedAt(time: String) = "Chặn lúc $time"
+        override fun matchedRule(rule: String) = "Theo quy tắc: $rule"
+        override fun repeatCallerGuardReason(attempt: Int, threshold: Int, minutes: Int) =
+            "Chặn số lạ trước ngưỡng · lượt $attempt/$threshold · cửa sổ $minutes phút"
+        override fun consecutiveMissed(count: Int) = "$count cuộc liên tiếp chưa trả lời"
+        override val menuDeleteRule = "Xoá quy tắc chặn"
+        override val menuDeleteHistory = "Xoá khỏi lịch sử"
+
+        override val historyPeriodDay = "Ngày"
+        override val historyPeriodWeek = "Tuần"
+        override val historyPeriodMonth = "Tháng"
+        override val historyPickDate = "Chọn ngày cụ thể"
+        override val historyDateRangeNote = "Chỉ có thể chọn một ngày trong 30 ngày gần nhất."
+        override val historyOverviewTitle = "Tổng quan chặn"
+        override val historyTotalBlocks = "Lượt chặn"
+        override val historyUniqueNumbers = "Số riêng biệt"
+        override val historyPeakHour = "Giờ cao điểm"
+        override val historyPeakDay = "Ngày cao điểm"
+        override val historyNoPeak = "Chưa có"
+        override val historyActivityTitle = "Phân bố hoạt động"
+        override val historyHourlySubtitle = "Từng khung một giờ · từ 0h đến 24h"
+        override val historyDailySubtitle = "Từng ngày đầy đủ trong khoảng đang xem"
+        override val historySwipeChartHint = "Vuốt ngang để xem đầy đủ biểu đồ"
+        override fun historyHourBucket(fromHour: Int, toHour: Int) = "${fromHour}h–${toHour}h"
+        override fun historyDayAxis(day: Int) = "Ngày %02d".format(day)
+        override fun historyWeekdayAxis(day: java.time.DayOfWeek) = when (day) {
+            java.time.DayOfWeek.MONDAY -> "Thứ Hai"
+            java.time.DayOfWeek.TUESDAY -> "Thứ Ba"
+            java.time.DayOfWeek.WEDNESDAY -> "Thứ Tư"
+            java.time.DayOfWeek.THURSDAY -> "Thứ Năm"
+            java.time.DayOfWeek.FRIDAY -> "Thứ Sáu"
+            java.time.DayOfWeek.SATURDAY -> "Thứ Bảy"
+            java.time.DayOfWeek.SUNDAY -> "Chủ Nhật"
+        }
+        override val historyDayPartsTitle = "Theo buổi trong ngày"
+        override val historyDayPartsSubtitle = "Cùng quy ước với Phân tích cuộc gọi"
+        override fun historyDayPartRange(fromHour: Int, toHour: Int) = "%02dh–%02dh".format(fromHour, toHour)
+        override val historyReasonsTitle = "Lý do chặn nổi bật"
+        override val historyTopNumbersTitle = "Số bị chặn nhiều nhất"
+        override fun historyDetails(count: Int) = "Lịch sử chi tiết ($count)"
+        override fun historyEvents(count: Int) = "$count lượt"
+        override fun historyRange(from: String, to: String) = "$from – $to"
+        override fun historyTrendUp(count: Int) = "Tăng $count lượt so với kỳ trước"
+        override fun historyTrendDown(count: Int) = "Giảm $count lượt so với kỳ trước"
+        override val historyTrendSame = "Không đổi so với kỳ trước"
+        override val historyNoEventsInPeriod = "Không có cuộc gọi bị chặn trong khoảng này."
+
+        override val createRuleTitle = "Thêm quy tắc chặn"
+        override val editRuleTitle = "Sửa quy tắc chặn"
+        override val save = "Lưu quy tắc"
+        override val update = "Cập nhật"
+        override val ruleTypeLabel = "Chọn cuộc gọi cần xử lý"
+        override val ruleValueLabel = "Số hoặc dãy số"
+        override val exactValueLabel = "Nhập số điện thoại"
+        override val prefixValueLabel = "Nhập đầu số"
+        override val suffixValueLabel = "Nhập đuôi số"
+        override val containsValueLabel = "Nhập dãy số"
+        override val lengthValueLabel = "Nhập số chữ số"
+        override val numberHint = "Nhập số hoặc dãy số"
+        override val carrierHint = "Chọn nhà mạng"
+        override val chooseRuleType = "Chọn cuộc gọi cần xử lý"
+        override val chooseCarrier = "Chọn nhà mạng"
+        override val typeExact = "Một số điện thoại cụ thể"
+        override val typePrefix = "Số bắt đầu bằng"
+        override val typeSuffix = "Số kết thúc bằng"
+        override val typeContains = "Số có chứa"
+        override val typeCarrier = "Theo nhà mạng"
+        override val typeSpamRisk = "Bộ lọc cuộc gọi có dấu hiệu spam"
+        override val spamRiskPickerDescription =
+            "Cuộc gọi có ít nhất một dấu hiệu rủi ro do CallHS nhận diện."
+        override val spamRiskDetailsTitle =
+            "CallHS chặn khi phát hiện ít nhất một dấu hiệu sau:"
+        override val spamRiskPrefixDetail =
+            "Số Việt Nam hoàn chỉnh bắt đầu bằng 022, 023, 024, 028, 059 hoặc 099."
+        override val spamRiskUnknownPrefixDetail =
+            "Số di động Việt Nam có 10 chữ số nhưng đầu số chưa được CallHS nhận diện."
+        override val spamRiskVerificationDetail =
+            "Trên Android 11 trở lên, mạng di động báo không xác minh được số gọi. Nếu thiết bị không cung cấp thông tin này, CallHS bỏ qua dấu hiệu đó."
+        override val spamRiskWarning =
+            "Các đầu số trên vẫn có thể là số hợp lệ. Bộ lọc có thể chặn nhầm cuộc gọi bình thường; Danh sách cho phép luôn được ưu tiên."
+        override fun spamRiskReasonPrefix(prefix: String) = "Dấu hiệu spam · Khớp đầu số $prefix"
+        override fun spamRiskReasonUnknownMobilePrefix(prefix: String) =
+            "Dấu hiệu spam · Đầu số di động $prefix chưa được nhận diện"
+        override val spamRiskReasonVerificationFailed =
+            "Dấu hiệu spam · Mạng báo xác minh số gọi thất bại"
+        override val typeSpecial = "Loại cuộc gọi đặc biệt"
+        override val typeContacts = "Theo danh bạ"
+        override val typeCallHistory = "Theo lịch sử cuộc gọi"
+        override val typeCountryAndAreaCode = "Quốc gia & đầu số Việt Nam"
+        override val typeBrandName = "Theo Brandname"
+        override val specialTitle = "Chọn một loại cuộc gọi"
+        override val specialPrivate = "Cuộc gọi ẩn số"
+        override val specialPrivateDesc =
+            "Cuộc gọi không cung cấp CLI hoặc số điện thoại của bên gọi."
+        override val specialUnknownContact = "Số chưa lưu trong danh bạ"
+        override val specialUnknownContactDesc = "Nhận diện số điện thoại không trùng với liên hệ nào trên thiết bị."
+        override val specialVoip = "Cuộc gọi Internet (quy tắc cũ)"
+        override val specialVoipDesc = "Chỉ dùng để đọc lịch sử hoặc dữ liệu cũ."
+        override val specialSipPhone = "SIP URI có user là số điện thoại"
+        override val specialSipPhoneDesc =
+            "Phần user trước dấu @ là một số điện thoại, ví dụ sip:+84912345678@provider.vn."
+        override val specialSipText = "SIP URI có user dạng chữ"
+        override val specialSipTextDesc =
+            "Phần user trước dấu @ là một chuỗi chữ hoặc ký tự, ví dụ sip:support@company.vn."
+        override val identityTermsTitle = "Tìm hiểu thuật ngữ cuộc gọi"
+        override val learnVoip = "VoIP là gì?"
+        override val learnSip = "SIP là gì?"
+        override val learnUri = "URI là gì?"
+        override val learnCli = "CLI là gì?"
+        override val learnCnam = "CNAM là gì?"
+        override val voipExplanation =
+            "VoIP (Voice over Internet Protocol) là công nghệ truyền giọng nói qua mạng IP như Wi-Fi, 4G/5G hoặc Internet thay vì chỉ dùng mạng thoại truyền thống.\n\n" +
+                "Một cuộc gọi VoIP có thể hiển thị số điện thoại thông thường hoặc một định danh SIP. VoIP chỉ mô tả cách cuộc gọi được truyền, không có nghĩa cuộc gọi đó là spam hay lừa đảo.\n\n" +
+                "Trong CallHS, mục “Cuộc gọi Internet (quy tắc cũ)” chỉ được giữ để đọc dữ liệu cũ. Khi tạo quy tắc mới, hãy chọn điều kiện SIP phù hợp nếu thiết bị cung cấp URI cuộc gọi."
+        override val sipExplanation =
+            "SIP (Session Initiation Protocol) là giao thức dùng để thiết lập, quản lý và kết thúc phiên gọi qua mạng IP. Một định danh SIP thường có dạng sip:user@domain; sips: là biến thể dùng kết nối bảo mật cho tín hiệu SIP.\n\n" +
+                "Phần user trước dấu @ có thể là số điện thoại, ví dụ sip:+84912345678@provider.vn, hoặc chuỗi chữ như sip:support@company.vn. CallHS tách hai trường hợp này thành hai điều kiện cuộc gọi đặc biệt.\n\n" +
+                "Android chuẩn thường chỉ chuyển địa chỉ tel: tới CallScreeningService. CallHS chỉ nhận diện được SIP/sips khi thiết bị hoặc nhà sản xuất chuyển URI đó cho ứng dụng."
+        override val uriExplanation =
+            "URI (Uniform Resource Identifier) là chuỗi dùng để định danh một tài nguyên. Trong cuộc gọi, URI cho biết kiểu địa chỉ và giá trị của bên gọi.\n\n" +
+                "Phần đứng trước dấu hai chấm là scheme. Ví dụ: tel:+84912345678 dùng scheme tel:, sip:user@domain dùng sip:, và sips:user@domain dùng sips:. URI không nhất thiết là địa chỉ web và cũng không phải lúc nào chứa số điện thoại.\n\n" +
+                "CallHS chỉ phân loại điều kiện SIP khi URI hợp lệ, có scheme sip: hoặc sips: và có phần user trước dấu @."
+        override val cliExplanation =
+            "CLI (Calling Line Identification) là thông tin số điện thoại của bên gọi mà mạng hoặc dịch vụ cuộc gọi cung cấp, ví dụ +84912345678. CallHS dùng CLI cho các quy tắc theo số, đầu số, đuôi số, độ dài, nhà mạng hoặc khu vực.\n\n" +
+                "CLI khác với CNAM là tên bên gọi và cũng khác với tên người dùng tự lưu trong Danh bạ. CLI có thể bị ẩn hoặc giả mạo, vì vậy số hiển thị không bảo đảm tuyệt đối danh tính thật của người gọi."
+        override val cnamExplanation =
+            "CNAM (Calling Name) là tên bên gọi do mạng hoặc dịch vụ cuộc gọi cung cấp để hiển thị, ví dụ Vietcombank. CallHS dùng dữ liệu này cho quy tắc Brandname.\n\n" +
+                "CNAM không phải CLI và không phải contactDisplayName — tên người dùng tự lưu trong Danh bạ. Việc đổi tên một liên hệ trên máy không làm thay đổi CNAM.\n\n" +
+                "CallScreeningService chuẩn không cung cấp callerDisplayName. CallHS chỉ có thể so khớp Brandname khi thiết bị hoặc nhà sản xuất mở rộng callback và chuyển tên này tới ứng dụng."
+        override val brandNamePickerTitle = "Chọn Brandname"
+        override val brandNamePickerOpen = "Chọn hoặc nhập Brandname"
+        override val brandNameCaseSensitiveNote =
+            "Tối đa 5 tên. Ví dụ “Vietcombank” khác “VIETCOMBANK”. Bạn có thể chọn gợi ý hoặc tự nhập."
+        override val brandNameInputHint = "Nhập chính xác Brandname"
+        override val brandNameAdd = "Thêm"
+        override fun brandNameSelectedCount(count: Int, max: Int) = "Đã chọn $count/$max tên"
+        override val brandNameTelecomCategory = "Nhà mạng"
+        override val brandNameBankCategory = "Ngân hàng"
+        override val brandNameWalletCategory = "Ví điện tử"
+        override val brandNameServiceCategory = "Dịch vụ & cơ quan"
+        override val brandNameSpamCategory = "Nhãn cảnh báo spam/lừa đảo"
+        override val brandNameSpamDisclaimer =
+            "Đây là nhãn cảnh báo thường gặp, không phải danh sách Brandname lừa đảo đã được xác nhận. Nội dung hiển thị có thể khác theo thiết bị."
+        override val brandNameAndroidLimit =
+            "CallScreeningService chuẩn không cung cấp callerDisplayName. Brandname chỉ có thể được nhận diện khi thiết bị/OEM mở rộng callback và chuyển tên này tới CallHS; nếu không, ứng dụng không có dữ liệu Brandname để so khớp."
+        override val specialAndroidLimit =
+            "Android chuẩn chỉ chuyển handle tel: vào CallScreeningService. SIP/sips là khả năng mở rộng tùy thiết bị hoặc OEM (Original Equipment Manufacturer — nhà sản xuất thiết bị); nếu URI không được chuyển tới CallHS thì ứng dụng không có dữ liệu để nhận diện tiêu chí SIP."
+        override val contactPickerTitle = "Chọn liên hệ"
+        override val contactPickerOpen = "Chọn từ danh bạ"
+        override val contactPickerSearchHint = "Tìm tên hoặc số điện thoại"
+        override val contactPickerPermissionTitle = "Cần quyền truy cập danh bạ"
+        override val contactPickerPermissionBody =
+            "Cho phép CallHS đọc danh bạ để bạn chọn liên hệ và nhận diện số lạ. Ứng dụng không sửa hoặc gửi danh bạ đi."
+        override val contactPickerPermissionAction = "Cho phép truy cập"
+        override fun contactPickerSelectedCount(count: Int) = "Đã chọn $count liên hệ"
+        override val contactPickerDone = "Hoàn tất"
+        override val contactPickerEmpty = "Danh bạ chưa có liên hệ kèm số điện thoại."
+        override val contactPickerNoResults = "Không tìm thấy liên hệ phù hợp."
+        override val callHistoryPickerTitle = "Chọn số từ lịch sử cuộc gọi"
+        override val callHistoryPickerOpen = "Chọn từ lịch sử cuộc gọi"
+        override val callHistoryPickerSearchHint = "Tìm tên hoặc số điện thoại"
+        override fun callHistoryPickerSelectedCount(count: Int) = "Đã chọn $count số"
+        override val callHistoryPickerEmpty = "Chưa có số điện thoại hợp lệ trong lịch sử cuộc gọi."
+        override val callHistoryPickerNoResults = "Không tìm thấy số phù hợp với tìm kiếm hoặc bộ lọc."
+        override val callHistoryPickerPreviouslySelected = "Đã chọn trước đó"
+        override val callHistoryPickerPreviouslySelectedNote =
+            "Các số này không nằm trong lịch sử đang hiển thị. Bạn vẫn có thể bỏ chọn tại đây."
+        override val validationSelectSpecial = "Hãy chọn ít nhất một loại cuộc gọi."
+        override val validationSelectBrandName = "Hãy chọn hoặc nhập ít nhất một Brandname."
+        override val validationSelectContact = "Hãy chọn ít nhất một liên hệ trong danh bạ."
+        override val validationSelectCallHistory = "Hãy chọn ít nhất một số trong lịch sử cuộc gọi."
+        override val regionPickerTitle = "Chọn quốc gia & đầu số Việt Nam"
+        override val regionInternationalSection = "Mã quốc gia quốc tế"
+        override val regionVietnamPrefixSection = "Đầu số Việt Nam"
+        override val regionAllInternationalExceptVietnam = "Tất cả số quốc tế, trừ Việt Nam (+84)"
+        override val regionAllInternationalExceptVietnamDesc =
+            "Nhận diện số quốc tế có mã quốc gia khác Việt Nam (+84)."
+        override val regionChina = "Trung Quốc (+86)"
+        override val regionCambodia = "Campuchia (+855)"
+        override val regionMyanmar = "Myanmar (+95)"
+        override val regionNanpShared = "NANP (+1, gồm Hoa Kỳ)"
+        override val regionGermany = "Đức (+49)"
+        override val regionLaos = "Lào (+856)"
+        override val regionThailand = "Thái Lan (+66)"
+        override val regionMalaysia = "Malaysia (+60)"
+        override val regionSingapore = "Singapore (+65)"
+        override val regionIndonesia = "Indonesia (+62)"
+        override val regionPhilippines = "Philippines (+63)"
+        override val regionIndia = "Ấn Độ (+91)"
+        override val regionPrefix024 = "024 · Hà Nội"
+        override val regionPrefix022 = "022 · Nhóm đầu số cố định"
+        override val regionPrefix028 = "028 · TP. Hồ Chí Minh"
+        override val regionPrefix059 = "059 · Đầu số di động"
+        override val regionPrefix099 = "099 · Đầu số di động Gmobile"
+        override val regionCallerIdWarning =
+            "Bộ lọc dựa trên số người gọi hiển thị. Thông tin này có thể bị giả mạo nên mã số không đảm bảo nguồn gốc thật của cuộc gọi."
+        override val validationSelectRegion = "Hãy chọn ít nhất một mã quốc gia hoặc đầu số Việt Nam."
+        override val invalidRule = "Giá trị chưa hợp lệ. Với dãy số, hãy nhập ít nhất 2 chữ số."
+        override val duplicateRule = "Quy tắc này đã có trong danh sách."
+        override val maxRules = "Đã đạt tối đa 200 quy tắc chặn."
+        override val discardTitle = "Bỏ thay đổi?"
+        override val discardMessage = "Các thay đổi chưa lưu của quy tắc chặn này sẽ bị mất."
+        override val discardStay = "Ở lại"
+        override val discardExit = "Bỏ thay đổi"
+
+        override fun ruleSummary(type: String, value: String) = when (type) {
+            "exact" -> "Số $value"
+            "prefix" -> "Bắt đầu bằng $value"
+            "suffix" -> "Kết thúc bằng $value"
+            "contains" -> "Có chứa $value"
+            "length" -> "Có $value chữ số"
+            "any" -> "Mọi số trong phạm vi"
+            "carrier" -> "Nhà mạng $value"
+            "repeat_unanswered" -> "Quy tắc cũ · Gọi lặp chưa trả lời"
+            "spam_risk" -> typeSpamRisk
+            "special" -> specialSummary(value)
+            "brand_name" -> BrandNameRuleCodec.decode(value).let { names ->
+                if (names.isEmpty()) typeBrandName else "$typeBrandName: ${names.joinToString(", ")}"
+            }
+            "contacts" -> contactsSummary(value)
+            "call_history" -> callHistorySummary(value)
+            "geographic" -> regionSummary(value)
+            else -> value
+        }
+
+        override fun specialSummary(value: String): String {
+            val labels = SpecialCallCondition.decode(value).map { condition ->
+                when (condition) {
+                    SpecialCallCondition.PRIVATE_NUMBER -> specialPrivate
+                    SpecialCallCondition.UNKNOWN_CONTACT -> specialUnknownContact
+                    SpecialCallCondition.VOIP -> specialVoip
+                    SpecialCallCondition.SIP_PHONE_NUMBER -> specialSipPhone
+                    SpecialCallCondition.SIP_TEXT_ID -> specialSipText
+                }
+            }
+            return labels.takeIf { it.isNotEmpty() }?.joinToString(" · ") ?: typeSpecial
+        }
+
+        override fun contactsSummary(value: String): String {
+            val count = ContactRuleCodec.selectedCount(value)
+            return when (count) {
+                0 -> typeContacts
+                1 -> "Một liên hệ trong danh bạ"
+                else -> "$count liên hệ trong danh bạ"
+            }
+        }
+
+        override fun callHistorySummary(value: String): String {
+            val count = CallHistoryRuleCodec.selectedCount(value)
+            return when (count) {
+                0 -> typeCallHistory
+                1 -> "Một số từ lịch sử cuộc gọi"
+                else -> "$count số từ lịch sử cuộc gọi"
+            }
+        }
+
+        override fun regionSummary(value: String): String {
+            val labels = GeographicBlockOption.decode(value).map { option ->
+                when (option) {
+                    GeographicBlockOption.ALL_INTERNATIONAL_EXCEPT_VIETNAM -> regionAllInternationalExceptVietnam
+                    GeographicBlockOption.CHINA -> regionChina
+                    GeographicBlockOption.CAMBODIA -> regionCambodia
+                    GeographicBlockOption.MYANMAR -> regionMyanmar
+                    GeographicBlockOption.NANP_SHARED -> regionNanpShared
+                    GeographicBlockOption.GERMANY -> regionGermany
+                    GeographicBlockOption.LAOS -> regionLaos
+                    GeographicBlockOption.THAILAND -> regionThailand
+                    GeographicBlockOption.MALAYSIA -> regionMalaysia
+                    GeographicBlockOption.SINGAPORE -> regionSingapore
+                    GeographicBlockOption.INDONESIA -> regionIndonesia
+                    GeographicBlockOption.PHILIPPINES -> regionPhilippines
+                    GeographicBlockOption.INDIA -> regionIndia
+                    GeographicBlockOption.VIETNAM_PREFIX_024 -> regionPrefix024
+                    GeographicBlockOption.VIETNAM_PREFIX_022 -> regionPrefix022
+                    GeographicBlockOption.VIETNAM_PREFIX_028 -> regionPrefix028
+                    GeographicBlockOption.VIETNAM_PREFIX_059 -> regionPrefix059
+                    GeographicBlockOption.VIETNAM_PREFIX_099 -> regionPrefix099
+                }
+            }
+            return labels.takeIf { it.isNotEmpty() }?.joinToString(" · ") ?: typeCountryAndAreaCode
+        }
+
+        override val notificationChannelName = "Cảnh báo chặn cuộc gọi · Khẩn cấp"
+        override val notificationChannelDescription =
+            "Cảnh báo heads-up, âm thanh và rung khi CallHS vừa chặn một cuộc gọi"
+        override fun notificationTitle(number: String) = "Đã chặn cuộc gọi từ $number"
+        override fun notificationBody(total: Int, rule: String) = "Lần chặn thứ $total của số này · $rule"
+    }
+
+    private object Backup : BackupStrings {
+        override val settingsSection = "Sao lưu & khôi phục"
+        override val cardTitle = "Sao lưu & khôi phục dữ liệu"
+        override val cardSubtitle = "Xuất dữ liệu ra file và nhập lại khi cần"
+        override val open = "Mở sao lưu & khôi phục"
+
+        override val screenTitle = "Sao lưu & khôi phục"
+        override val callLogNote =
+            "Nhật ký cuộc gọi hệ thống là chỉ đọc nên không nằm trong bản sao lưu; riêng lịch sử do CallHS đã chặn có thể sao lưu tại đây."
+
+        override val backupTitle = "Sao lưu (xuất file)"
+        override val backupDesc =
+            "Chọn dữ liệu cần sao lưu rồi xuất ra một file. Bạn có thể lưu file này để phòng khi mất máy hoặc chuyển sang máy khác."
+        override val chooseData = "Chọn dữ liệu"
+        override val exportButton = "Xuất ra file"
+        override val exporting = "Đang xuất…"
+
+        override val restoreTitle = "Khôi phục (nhập file)"
+        override val restoreDesc =
+            "Chọn một file sao lưu đã lưu để khôi phục lại dữ liệu vào ứng dụng."
+        override val pickFileButton = "Chọn file sao lưu"
+        override val pickAnotherButton = "Chọn file khác"
+        override val restoreButton = "Khôi phục"
+        override val restoring = "Đang khôi phục…"
+        override val fileLabel = "File sao lưu"
+        override fun fileMeta(date: String, appVersion: String) =
+            if (appVersion.isBlank()) "Tạo lúc $date" else "Tạo lúc $date · phiên bản $appVersion"
+        override val chooseSections = "Chọn phần cần khôi phục"
+
+        override val modeTitle = "Cách khôi phục"
+        override val modeReplace = "Ghi đè toàn bộ"
+        override val modeReplaceDesc = "Xoá dữ liệu hiện tại, thay bằng bản sao lưu."
+        override val modeAdd = "Thêm, không ghi đè"
+        override val modeAddDesc = "Chỉ thêm mục mới, giữ nguyên dữ liệu đang có."
+        override val modeUpdate = "Cập nhật & thêm"
+        override val modeUpdateDesc = "Thêm mục mới và cập nhật mục trùng theo bản sao lưu."
+
+        override val secTemplates = "Mẫu tin nhắn"
+        override val secTemplatesSub = "Các mẫu tin nhắn soạn sẵn"
+        override val secQr = "Lịch sử quét QR"
+        override val secQrSub = "Các mã QR đã quét gần đây"
+        override val secCategories = "Phân loại nhóm"
+        override val secCategoriesSub = "Nhóm & số điện thoại thành viên"
+        override val secBlockRules = "Quy tắc chặn cuộc gọi"
+        override val secBlockRulesSub = "Quy tắc, phương thức xử lý, trạng thái bảo vệ và thông báo"
+        override val secBlockHistory = "Lịch sử cuộc gọi bị chặn"
+        override val secBlockHistorySub = "Các sự kiện CallHS đã chặn"
+        override val secMyNumber = "Số của tôi"
+        override val secMyNumberSub = "Số điện thoại của bạn theo SIM"
+        override val secDisplay = "Cài đặt hiển thị"
+        override val secDisplaySub = "Giao diện, ngôn ngữ, cỡ chữ"
+        override fun itemsCount(n: Int) = "$n mục"
+
+        override val confirmReplaceTitle = "Ghi đè dữ liệu?"
+        override val confirmReplaceMessage =
+            "Chế độ “Ghi đè toàn bộ” sẽ XOÁ dữ liệu hiện tại của các phần được chọn và thay bằng bản sao lưu. Thao tác này không thể hoàn tác."
+
+        override val exportOkTitle = "Đã lưu bản sao lưu"
+        override val exportOkMessage = "Đã xuất dữ liệu ra file thành công."
+        override val resultTitle = "Đã khôi phục"
+        override fun resultLine(section: String, added: Int, updated: Int, skipped: Int): String {
+            val parts = buildList {
+                if (added > 0) add("+$added thêm")
+                if (updated > 0) add("$updated cập nhật")
+                if (skipped > 0) add("$skipped bỏ qua")
+            }
+            return if (parts.isEmpty()) "$section: không có thay đổi" else "$section: ${parts.joinToString(" · ")}"
+        }
+        override val displayApplied = "Đã áp dụng"
+        override val displayKept = "Giữ nguyên"
+        override val truncatedNote = "Một số mục vượt giới hạn nên đã được bỏ bớt."
+        override val done = "Xong"
+
+        override val errInvalidFile = "File không hợp lệ hoặc không phải bản sao lưu của CallHS."
+        override val errWriteFailed = "Không lưu được file. Vui lòng thử lại."
+        override val errReadFailed = "Không đọc được file. Vui lòng thử lại."
+        override val errNothingSelected = "Hãy chọn ít nhất một phần dữ liệu."
+        override val errEmptyBackup = "File sao lưu không có dữ liệu nào để khôi phục."
     }
 }

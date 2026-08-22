@@ -1,10 +1,13 @@
 package com.antimobile.callhs.util
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Build
 import android.telephony.SubscriptionInfo
 import android.telephony.SubscriptionManager
 import android.telephony.TelephonyManager
+import androidx.core.content.ContextCompat
 
 /**
  * Nhận diện các SIM đang lắp trên máy và suy ra NHÀ MẠNG của từng SIM — dùng để phân loại
@@ -69,6 +72,14 @@ object SimInfo {
      * Mọi lời gọi bọc runCatching để thiếu quyền/không hỗ trợ → bỏ qua, KHÔNG ném lỗi.
      */
     private fun readAutoNumber(context: Context, subscriptionId: Int, quickNumber: String?): String {
+        // Both platform number APIs require a runtime phone-number permission. Keep this explicit
+        // even though callers normally pass through onboarding: permissions can be revoked while
+        // the process remains alive, in which case the cached SubscriptionInfo value is safest.
+        if (
+            ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_NUMBERS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) return quickNumber?.trim().orEmpty()
+
         val fromManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val sm = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as? SubscriptionManager
             runCatching { sm?.getPhoneNumber(subscriptionId) }.getOrNull()

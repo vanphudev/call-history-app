@@ -300,6 +300,7 @@ private fun QrScannerContent(onResult: (String) -> Unit, onClose: () -> Unit) {
  *  - CHỤM 2 ngón → phóng to/thu nhỏ (`setZoomRatio`, kẹp trong [min,max] của `zoomState`).
  * Lớp cử chỉ là Box PHỦ TRÊN xem trước (nút bấm ở thanh trên/dưới tự nuốt chạm nên không kích nhầm lấy nét).
  */
+@androidx.annotation.OptIn(markerClass = [ExperimentalGetImage::class])
 @Composable
 private fun CameraPreview(
     controller: LifecycleCameraController,
