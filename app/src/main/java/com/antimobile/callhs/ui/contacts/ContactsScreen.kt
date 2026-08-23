@@ -11,9 +11,6 @@ import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -21,7 +18,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -35,13 +31,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -81,45 +75,37 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
@@ -143,6 +129,8 @@ import com.antimobile.callhs.ui.components.ActionGlyph
 import com.antimobile.callhs.ui.components.AppBottomSheet
 import com.antimobile.callhs.ui.components.ContextAction
 import com.antimobile.callhs.ui.components.ContextMenuOverlay
+import com.antimobile.callhs.ui.components.GearIndexBar
+import com.antimobile.callhs.ui.components.GearIndexItem
 import com.antimobile.callhs.ui.components.LoadingState
 import com.antimobile.callhs.ui.components.PanelCard
 import com.antimobile.callhs.ui.components.QrActionSheet
@@ -158,8 +146,6 @@ import com.antimobile.callhs.ui.theme.AccentRed
 import com.antimobile.callhs.ui.theme.AccentGreenBg
 import com.antimobile.callhs.ui.theme.AppBackground
 import com.antimobile.callhs.ui.theme.CardFill
-import com.antimobile.callhs.ui.theme.CardShadow
-import com.antimobile.callhs.ui.theme.CardSurface
 import com.antimobile.callhs.ui.theme.FieldSurface
 import com.antimobile.callhs.ui.theme.Primary
 import com.antimobile.callhs.ui.theme.TextPrimary
@@ -176,15 +162,12 @@ import com.antimobile.callhs.util.ContactActions
 import com.antimobile.callhs.util.MessageTemplate
 import com.antimobile.callhs.util.QrContent
 import com.antimobile.callhs.util.SimInfo
-import com.antimobile.callhs.util.SliderTick
 import com.antimobile.callhs.util.TemplateContext
 import com.antimobile.callhs.util.TemplateFill
 import com.antimobile.callhs.util.formatPhone
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.math.abs
-import kotlin.math.roundToInt
 
 /** Đích của màn soạn mẫu tin nhắn: tạo mới hoặc sửa một mẫu có sẵn (giống CallDetailScreen). */
 private sealed interface TemplateEditorTarget {
@@ -1156,178 +1139,13 @@ private fun AlphabetIndexBar(
     modifier: Modifier = Modifier,
     onFocusLetter: (String) -> Unit
 ) {
-    if (letters.isEmpty()) return
-    val haptic = LocalHapticFeedback.current
-    // Bám callback MỚI NHẤT: pointerInput chỉ khoá theo `letters`, không khởi động lại khi lambda đổi (vd sau khi
-    // danh bạ nạp lại, listing đổi index dòng). Không có cái này thì kéo mục lục cuộn tới dòng theo listing CŨ.
-    val focusLetter by rememberUpdatedState(onFocusLetter)
-    val density = LocalDensity.current
-    // Âm "tạch" như lẫy bánh răng: mỗi lần trượt sang chữ mới phát một tiếng. Giữ theo vòng đời màn,
-    // nhả tài nguyên audio khi rời (đồng hành với rung ở cùng điểm đổi chữ bên dưới).
-    val context = LocalContext.current
-    val tick = remember { SliderTick(context) }
-    DisposableEffect(Unit) { onDispose { tick.release() } }
-    val n = letters.size
-    // Ô CAO lý tưởng cho mỗi chữ (đủ rộng để chạm trúng ngay); ÍT chữ → dải NGẮN, nằm GIỮA;
-    // NHIỀU chữ → co ô lại cho vừa chiều cao (dải dài kín khung). → luôn cân đối theo số lượng.
-    val preferredSlotPx = with(density) { 26.dp.toPx() }
-
-    var fullHpx by remember { mutableStateOf(0f) }     // chiều cao VÙNG CHẠM (px) = cả cột dọc
-    var dragging by remember { mutableStateOf(false) } // đang chạm/kéo?
-    var lastTouchY by remember { mutableStateOf(0f) }  // vị trí ngón tay QUY VỀ trong DẢI (px, 0..stripHpx)
-    var lastFocused by remember { mutableStateOf<String?>(null) }
-
-    // 0 khi rảnh → 1 khi đang kéo; nhả tay animate về 0 để chữ thu nhỏ MƯỢT.
-    val expansion by animateFloatAsState(
-        targetValue = if (dragging) 1f else 0f,
-        animationSpec = spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow),
-        label = "alphaIndexExpand"
+    val items = remember(letters) { letters.map { GearIndexItem(key = it, label = it) } }
+    GearIndexBar(
+        items = items,
+        currentKey = currentLetter,
+        modifier = modifier,
+        onFocusKey = onFocusLetter
     )
-
-    // Hình học DẢI (đồng bộ giữa VẼ & CHẠM): ít chữ → dải NGẮN nằm GIỮA; nhiều → co ô cho kín khung.
-    val slotPx = if (fullHpx > 0f) minOf(preferredSlotPx, fullHpx / n) else preferredSlotPx
-    val stripHpx = slotPx * n
-    val stripH = with(density) { stripHpx.toDp() }
-
-    // VÙNG CHẠM = TOÀN chiều cao × 44dp (không chỉ phần dải chữ) → chạm bất kỳ đâu trên rãnh đều BẮT chữ ngay.
-    Box(
-        modifier = modifier
-            .fillMaxHeight()
-            .width(44.dp)
-            .onSizeChanged { fullHpx = it.height.toFloat() }
-            .pointerInput(letters) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val down = awaitFirstDown(requireUnconsumed = false)
-                        // Đọc hình học TỨC THỜI từ kích thước thật của vùng chạm → quy toạ độ chạm về trong DẢI.
-                        val h = size.height.toFloat()
-                        val slot = if (h > 0f) minOf(preferredSlotPx, h / n) else preferredSlotPx
-                        val sHpx = slot * n
-                        val top = ((h - sHpx) / 2f).coerceAtLeast(0f) // dải canh GIỮA vùng chạm
-                        // Chạm NGOÀI dải chữ (vùng trống trên/dưới pill) → KHÔNG bắt (không consume) để danh sách
-                        // nhận chạm/cuộn. Trước đây vùng chạm cao TOÀN màn nên nuốt tap/cuộn ở mép phải mỗi thẻ.
-                        if (down.position.y < top || down.position.y > top + sHpx) continue
-                        val pointerId = down.id // BÁM đúng ngón đã chạm (bỏ ngón thứ 2)
-                        lastFocused = null      // reset bộ-phát-hiện-đổi-chữ cho lượt kéo mới
-                        dragging = true
-                        val focus: (Float) -> Unit = focus@{ rawY ->
-                            if (slot <= 0f) return@focus
-                            val local = (rawY - top).coerceIn(0f, sHpx) // trên dải→chữ đầu, dưới→chữ cuối
-                            lastTouchY = local
-                            val idx = (local / slot).toInt().coerceIn(0, n - 1)
-                            val letter = letters[idx]
-                            if (letter != lastFocused) {
-                                lastFocused = letter
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                tick.tick() // tiếng "tạch" đi kèm rung, đúng mỗi nấc chữ cái
-                                focusLetter(letter)
-                            }
-                        }
-                        focus(down.position.y)  // BẮT chữ + cuộn NGAY khi vừa chạm (không ngưỡng, không chờ)
-                        down.consume()
-                        var pressed = true
-                        while (pressed) {
-                            val event = awaitPointerEvent()
-                            val change = event.changes.firstOrNull { it.id == pointerId }
-                            if (change == null || !change.pressed) {
-                                pressed = false
-                            } else {
-                                focus(change.position.y)
-                                change.consume()
-                            }
-                        }
-                        // Nhả tay: GIỮ lastFocused để bong bóng + chữ thu theo expansion (mượt), không tắt phựt.
-                        dragging = false
-                    }
-                }
-            }
-    ) {
-        if (fullHpx > 0f) {
-            // DẢI chữ cao [stripH], canh GIỮA theo chiều dọc trong vùng chạm.
-            Box(
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .height(stripH)
-                    .fillMaxWidth()
-            ) {
-                // Nền PILL MỜ (frosted) — LUÔN hiện, BO TRÒN hai đầu, nổi (đổ bóng nhẹ) và ĐÈ cố định lên danh
-                // sách full-rộng bên dưới. Dùng CardSurface (theo chế độ): ở SÁNG ra pill gần-trắng như cũ, ở TỐI
-                // ra pill TỐI mờ → chữ chỉ mục (TextSecondary/Primary) vẫn đọc rõ, KHÔNG còn thanh trắng chói.
-                // Bán trong suốt nên vẫn THẤY nội dung phía sau; kéo tay → tô thêm chút tone xanh cho rõ đang thao tác.
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .shadow(elevation = 3.dp, shape = RoundedCornerShape(percent = 50), clip = false, ambientColor = CardShadow, spotColor = CardShadow)
-                        .clip(RoundedCornerShape(percent = 50))
-                        .background(CardSurface.copy(alpha = 0.7f))
-                        .background(Primary.copy(alpha = 0.06f * expansion))
-                )
-                Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-                    letters.forEachIndexed { i, letter ->
-                        val center = (i + 0.5f) * slotPx
-                        val dist = abs(lastTouchY - center)
-                        val radius = slotPx * 3.5f
-                        val prox = (1f - dist / radius).coerceIn(0f, 1f)
-                        val bump = prox * prox                      // ease-in để đỉnh nhọn hơn
-                        val scale = 1f + bump * 1.4f * expansion
-                        val tx = -bump * 30f * expansion            // bong ra TRÁI về phía ngón tay
-                        // Đang kéo → tô chữ đang BẮT (lastFocused); rảnh → tô chữ nhóm đang xem (currentLetter).
-                        // Một điều kiện liền mạch → KHÔNG có "vùng chết" gây nháy khi nhả tay.
-                        val selected = if (expansion > 0.02f) letter == lastFocused else letter == currentLetter
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth()
-                                .graphicsLayer {
-                                    scaleX = scale
-                                    scaleY = scale
-                                    translationX = tx
-                                    transformOrigin = TransformOrigin(1f, 0.5f)
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = letter,
-                                color = if (selected) Primary else TextSecondary,
-                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                                fontSize = 11.sp,
-                                maxLines = 1
-                            )
-                        }
-                    }
-                }
-
-                // Bong bóng chữ cái LỚN nổi bên trái ngón tay khi đang kéo (tràn ra ngoài dải — không bị cắt).
-                if (lastFocused != null && expansion > 0.02f) {
-                    val bubble = 58.dp
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .offset {
-                                val bpx = bubble.toPx()
-                                IntOffset(
-                                    x = -(bpx + 14.dp.toPx()).roundToInt(),
-                                    // giữ bong bóng NẰM TRONG dải theo chiều dọc (không trồi lên che danh sách/ô tìm kiếm)
-                                    y = (lastTouchY - bpx / 2f).coerceIn(0f, (stripHpx - bpx).coerceAtLeast(0f)).roundToInt()
-                                )
-                            }
-                            .size(bubble)
-                            .graphicsLayer {
-                                alpha = expansion
-                                val s = 0.7f + 0.3f * expansion
-                                scaleX = s; scaleY = s
-                                transformOrigin = TransformOrigin(1f, 0.5f)
-                            }
-                            .clip(CircleShape)
-                            .background(Primary),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(lastFocused ?: "", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 26.sp)
-                    }
-                }
-            }
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------------------------------

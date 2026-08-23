@@ -1,11 +1,6 @@
 package com.antimobile.callhs.ui.blocking
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -163,7 +158,8 @@ fun CallBlockNumberListScreen(
     action: CallBlockAction,
     onBack: () -> Unit,
 ) {
-    val s = appStrings().blocker
+    val strings = appStrings()
+    val s = strings.blocker
     val entries = if (action == CallBlockAction.ALLOW) vm.allowlist else vm.blocklist
     var target by remember { mutableStateOf<NumberMenuTarget?>(null) }
     var showSource by remember { mutableStateOf(false) }
@@ -184,11 +180,11 @@ fun CallBlockNumberListScreen(
     val scrollScope = rememberCoroutineScope()
     val backdropLayer = rememberGraphicsLayer()
     var listContentCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
-    val scrollToTop by remember {
+    val canScrollUp by remember {
         derivedStateOf { listState.canScrollBackward }
     }
-    val showScrollControl by remember {
-        derivedStateOf { listState.canScrollBackward || listState.canScrollForward }
+    val canScrollDown by remember {
+        derivedStateOf { listState.canScrollForward }
     }
     val navigationBottom = with(density) { bottomInset.toDp() }
 
@@ -215,14 +211,13 @@ fun CallBlockNumberListScreen(
                     .fillMaxSize()
                     .onGloballyPositioned { listContentCoords = it }
                     .drawWithContent {
-                        if (showScrollControl) {
-                            backdropLayer.record { this@drawWithContent.drawContent() }
-                            drawLayer(backdropLayer)
-                        } else {
-                            drawContent()
-                        }
+                        // Hai nút cuộn luôn cố định như tab Lịch sử, nên luôn ghi lớp nội dung
+                        // phía dưới để nền kính mờ của cả nút bật lẫn nút đang vô hiệu hoạt động.
+                        backdropLayer.record { this@drawWithContent.drawContent() }
+                        drawLayer(backdropLayer)
                     },
-                contentPadding = PaddingValues(bottom = navigationBottom + 88.dp),
+                // Hai nút cuộn nằm giữa cạnh phải, không còn FAB ở đáy cần né.
+                contentPadding = PaddingValues(bottom = navigationBottom + 24.dp),
             ) {
                 item { AddNumberCard(onClick = { showSource = true }) }
                 if (entries.isEmpty()) {
@@ -251,42 +246,39 @@ fun CallBlockNumberListScreen(
 
         Column(
             modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 20.dp, bottom = navigationBottom + 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .align(Alignment.CenterEnd)
+                .padding(end = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            AnimatedVisibility(
-                visible = showScrollControl,
-                enter = fadeIn() + scaleIn(initialScale = 0.7f),
-                exit = fadeOut() + scaleOut(targetScale = 0.7f),
-            ) {
-                FrostedScrollButton(
-                    icon = if (scrollToTop) {
-                        Icons.Rounded.KeyboardArrowUp
-                    } else {
-                        Icons.Rounded.KeyboardArrowDown
-                    },
-                    contentDescription = if (scrollToTop) {
-                        appStrings().callList.scrollToTop
-                    } else {
-                        appStrings().callList.scrollToBottom
-                    },
-                    backdropLayer = backdropLayer,
-                    contentCoords = listContentCoords,
-                    onClick = {
-                        scrollScope.launch {
-                            if (scrollToTop) {
-                                listState.animateScrollToItem(0)
-                            } else {
-                                val lastIndex =
-                                    (listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0)
-                                listState.animateScrollToItem(lastIndex)
-                            }
-                        }
-                    },
-                )
-            }
+            FrostedScrollButton(
+                icon = Icons.Rounded.KeyboardArrowUp,
+                contentDescription = strings.callList.scrollToTop,
+                backdropLayer = backdropLayer,
+                contentCoords = listContentCoords,
+                enabled = canScrollUp,
+                buttonSize = 40.dp,
+                iconSize = 24.dp,
+                onClick = {
+                    scrollScope.launch { listState.animateScrollToItem(0) }
+                },
+            )
+            FrostedScrollButton(
+                icon = Icons.Rounded.KeyboardArrowDown,
+                contentDescription = strings.callList.scrollToBottom,
+                backdropLayer = backdropLayer,
+                contentCoords = listContentCoords,
+                enabled = canScrollDown,
+                buttonSize = 40.dp,
+                iconSize = 24.dp,
+                onClick = {
+                    scrollScope.launch {
+                        val lastIndex =
+                            (listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0)
+                        listState.animateScrollToItem(lastIndex)
+                    }
+                },
+            )
         }
 
         target?.let { selected ->
@@ -517,7 +509,10 @@ fun CallBlockAdvancedRulesScreen(
             BlockTopBar(title = s.advancedRulesScreenTitle, onBack = onBack)
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = navigationBottom + 96.dp),
+                // Chỉ chừa vùng FAB khi cụm thao tác hàng loạt thực sự xuất hiện.
+                contentPadding = PaddingValues(
+                    bottom = navigationBottom + if (rules.isNotEmpty()) 96.dp else 24.dp,
+                ),
             ) {
                 item { AddAdvancedRuleCard(onCreate) }
                 item {

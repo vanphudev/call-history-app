@@ -1302,7 +1302,7 @@ object ViStrings : AppStrings {
             "Chặn số lạ trước ngưỡng · lượt $attempt/$threshold · cửa sổ $minutes phút"
         override fun consecutiveMissed(count: Int) = "$count cuộc liên tiếp chưa trả lời"
         override val menuDeleteRule = "Xoá quy tắc chặn"
-        override val menuDeleteHistory = "Xoá khỏi lịch sử"
+        override val menuDeleteHistory = "Xoá lịch sử"
 
         override val historyPeriodDay = "Ngày"
         override val historyPeriodWeek = "Tuần"

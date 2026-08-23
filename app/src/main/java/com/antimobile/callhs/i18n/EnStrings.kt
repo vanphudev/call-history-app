@@ -1315,7 +1315,7 @@ object EnStrings : AppStrings {
         override fun consecutiveMissed(count: Int) =
             if (count == 1) "1 unanswered call" else "$count consecutive unanswered calls"
         override val menuDeleteRule = "Delete blocking rule"
-        override val menuDeleteHistory = "Remove from history"
+        override val menuDeleteHistory = "Delete history"
 
         override val historyPeriodDay = "Day"
         override val historyPeriodWeek = "Week"

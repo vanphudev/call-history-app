@@ -1,7 +1,11 @@
 package com.antimobile.callhs.ui.blocking
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -197,7 +201,9 @@ private fun CommonIssueCard(
     onAction: () -> Unit,
 ) {
     PanelCard(
-        modifier = Modifier.fillMaxWidth().animateContentSize(),
+        // AnimatedVisibility bên dưới đã phát chiều cao mới ở từng frame. Không bọc thêm
+        // animateContentSize vì hai animation chiều cao nối tiếp nhau làm item kế tiếp đi lên trễ.
+        modifier = Modifier.fillMaxWidth(),
         radius = 20.dp,
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -239,7 +245,17 @@ private fun CommonIssueCard(
                 )
             }
 
-            AnimatedVisibility(visible = expanded) {
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically(
+                    animationSpec = tween(durationMillis = 260),
+                    expandFrom = Alignment.Top,
+                ) + fadeIn(animationSpec = tween(durationMillis = 180)),
+                exit = shrinkVertically(
+                    animationSpec = tween(durationMillis = 220),
+                    shrinkTowards = Alignment.Top,
+                ) + fadeOut(animationSpec = tween(durationMillis = 140)),
+            ) {
                 Column(modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, bottom = 14.dp)) {
                     CommonIssueExplanation(
                         label = s.commonIssuesPossibleCause,

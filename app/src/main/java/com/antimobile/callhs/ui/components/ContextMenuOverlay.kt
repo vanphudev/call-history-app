@@ -10,10 +10,11 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,7 +42,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -50,7 +50,6 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
@@ -74,10 +73,10 @@ data class ContextAction(
     val onClick: () -> Unit,
 )
 
-/** Hành động dạng chữ: hiển thị thành nút pill ở hàng riêng bên dưới hàng icon. */
-data class ContextTextAction(
+/** Hành động dạng card: nền trắng bo góc, icon và nhãn xám đặt cùng một hàng. */
+data class ContextCardAction(
+    val icon: ImageVector,
     val label: String,
-    val tint: Color,
     val onClick: () -> Unit,
 )
 
@@ -92,8 +91,11 @@ private val ACTION_SIZE = 48.dp        // đường kính nút tròn
 private val ACTION_GLYPH = 24.dp       // cỡ icon material bên trong nút
 private val ACTION_LOGO_GLYPH = 30.dp  // logo nhiều màu (vd Zalo) hiển thị to hơn 1 tí cho cân
 private val ACTION_GAP = 12.dp         // khoảng cách ĐỀU giữa các nút
-private val TEXT_ACTION_HEIGHT = 56.dp // đủ cho nhãn dài xuống tối đa hai dòng mà vẫn giữ dáng pill
-private val STACKED_TEXT_ACTION_WIDTH = 248.dp
+private val CARD_ACTION_HEIGHT = 50.dp
+private val CARD_ACTION_WIDTH = 232.dp
+private val CARD_ACTION_RADIUS = 18.dp
+private val CARD_ACTION_ICON = 22.dp
+private val CARD_ACTION_FOREGROUND = Color(0xFF5F6368)
 
 /**
  * Lớp phủ CONTEXT-MENU kiểu Zalo dùng CHUNG toàn dự án — thay cho cử chỉ vuốt-lộ-hành-động.
@@ -110,16 +112,14 @@ private val STACKED_TEXT_ACTION_WIDTH = 248.dp
  *
  * @param bounds khung THẺ gốc (toạ độ cửa sổ, px) — dùng để đặt bản sao [lifted] đúng chỗ & canh hàng icon.
  * @param actions danh sách hành động; bấm nút nào cũng tự ĐÓNG menu sau khi chạy [ContextAction.onClick].
- * @param textActions hành động chữ dạng pill, nằm thành hàng riêng bên dưới [actions] và có bề rộng bằng nhau.
- * @param stackTextActions xếp mỗi hành động chữ thành một hàng, canh phải và dùng bề mặt kính trong suốt.
+ * @param cardActions các hàng hành động nằm chung trong một card trắng bo góc, canh phải dưới [actions].
  * @param lifted bản sao THẺ (vẽ y hệt item gốc) — được đo theo bề rộng của [bounds].
  */
 @Composable
 fun ContextMenuOverlay(
     bounds: Rect,
     actions: List<ContextAction>,
-    textActions: List<ContextTextAction> = emptyList(),
-    stackTextActions: Boolean = false,
+    cardActions: List<ContextCardAction> = emptyList(),
     topInsetPx: Int,
     bottomInsetPx: Int,
     onClosed: () -> Unit,
@@ -161,7 +161,6 @@ fun ContextMenuOverlay(
             else tween(durationMillis = 140, easing = FastOutSlowInEasing)
         }, label = "appear"
     ) { if (it) 1f else 0f }
-
     Box(Modifier.fillMaxSize()) {
         // 1) Nền tối phủ toàn màn. Chạm nền để đóng; chặn kéo lọt xuống danh sách phía sau.
         //    KHI bắt đầu ĐÓNG (closing) → GỠ NGAY mọi bắt-chạm: từ giây phút đó overlay chỉ còn là lớp mờ
@@ -201,9 +200,11 @@ fun ContextMenuOverlay(
                 ) {
                     lifted()
                 }
-                // [1] Hàng icon và (nếu có) hàng nút chữ bên dưới, bung ra từ mép PHẢI gần item.
+                // [1] Hàng icon và (nếu có) cụm card hành động bên dưới, bung ra từ mép PHẢI gần item.
                 Box(
                     modifier = Modifier.graphicsLayer {
+                        // Dùng đúng một alpha + scale cho toàn bộ menu như cụm icon ở UI chặn chính.
+                        // Bóng, nền, icon và chữ vì thế vào/ra cùng frame, không còn nháy giữa các lớp.
                         alpha = appear
                         val s = 0.88f + 0.12f * appear
                         scaleX = s
@@ -215,56 +216,28 @@ fun ContextMenuOverlay(
                         horizontalAlignment = Alignment.End,
                         verticalArrangement = Arrangement.spacedBy(ACTION_GAP),
                     ) {
-                        Row(
-                            modifier = if (textActions.isNotEmpty() && !stackTextActions) {
-                                Modifier.fillMaxWidth()
-                            } else {
-                                Modifier
-                            },
-                            horizontalArrangement = if (textActions.isNotEmpty() && !stackTextActions) {
-                                Arrangement.SpaceEvenly
-                            } else {
-                                Arrangement.spacedBy(ACTION_GAP)
-                            },
-                        ) {
-                            actions.forEach { action ->
-                                // Chặn bấm nút hành động khi ĐANG đóng (nút đang mờ dần) để không lỡ chạy 2 lần
-                                // (vd gọi/sao chép) do một cú chạm lạc vào lúc chuyển cảnh.
-                                CircleAction(action) { if (!closing) { action.onClick(); requestClose() } }
+                        if (actions.isNotEmpty()) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(ACTION_GAP),
+                            ) {
+                                actions.forEach { action ->
+                                    // Chặn bấm nút hành động khi ĐANG đóng (nút đang mờ dần) để không lỡ chạy 2 lần
+                                    // (vd gọi/sao chép) do một cú chạm lạc vào lúc chuyển cảnh.
+                                    CircleAction(action) { if (!closing) { action.onClick(); requestClose() } }
+                                }
                             }
                         }
-                        if (textActions.isNotEmpty()) {
-                            if (stackTextActions) {
-                                textActions.forEach { action ->
-                                    TextAction(
-                                        action = action,
-                                        modifier = Modifier.width(STACKED_TEXT_ACTION_WIDTH),
-                                        glass = true,
-                                    ) {
-                                        if (!closing) {
-                                            action.onClick()
-                                            requestClose()
-                                        }
+                        if (cardActions.isNotEmpty()) {
+                            ContextActionCardGroup(
+                                actions = cardActions,
+                                modifier = Modifier.width(CARD_ACTION_WIDTH),
+                                onAction = { action ->
+                                    if (!closing) {
+                                        action.onClick()
+                                        requestClose()
                                     }
-                                }
-                            } else {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(ACTION_GAP),
-                                ) {
-                                    textActions.forEach { action ->
-                                        TextAction(
-                                            action = action,
-                                            modifier = Modifier.weight(1f),
-                                        ) {
-                                            if (!closing) {
-                                                action.onClick()
-                                                requestClose()
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                                },
+                            )
                         }
                     }
                 }
@@ -336,47 +309,64 @@ private fun CircleAction(action: ContextAction, onClick: () -> Unit) {
     }
 }
 
-/** Nút chữ bo tròn hai đầu; các nút cùng hàng nhận cùng trọng số nên luôn canh và rộng đều nhau. */
+/** Một card liền khối chứa các hàng hành động; chỉ card ngoài có nền, bo góc và bóng. */
 @Composable
-private fun TextAction(
-    action: ContextTextAction,
+private fun ContextActionCardGroup(
+    actions: List<ContextCardAction>,
     modifier: Modifier = Modifier,
-    glass: Boolean = false,
-    onClick: () -> Unit,
+    onAction: (ContextCardAction) -> Unit,
 ) {
-    val shape = RoundedCornerShape(50)
-    val surface = if (glass) {
-        Modifier
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color.White.copy(alpha = 0.22f),
-                        Color.White.copy(alpha = 0.10f),
-                    )
-                )
-            )
-            .border(1.dp, Color.White.copy(alpha = 0.30f), shape)
-    } else {
-        Modifier.background(CardSurface)
-    }
-    Box(
+    val shape = RoundedCornerShape(CARD_ACTION_RADIUS)
+    Column(
         modifier = modifier
-            .height(TEXT_ACTION_HEIGHT)
+            // Giống CircleAction: bóng → clip → nền nằm trong cùng cây render và cùng animation cha.
             .shadow(6.dp, shape)
             .clip(shape)
-            .then(surface)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp),
-        contentAlignment = Alignment.Center,
+            .background(Color.White),
     ) {
-        Text(
-            text = action.label,
-            style = MaterialTheme.typography.labelLarge,
-            color = if (glass) Color.White else action.tint,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
+        actions.forEach { action ->
+            val interactionSource = remember(action.label) { MutableInteractionSource() }
+            Row(
+                modifier = Modifier
+                    // Mỗi item phủ kín chiều ngang card để toàn hàng đều nhận chạm và highlight.
+                    .fillMaxWidth()
+                    .height(CARD_ACTION_HEIGHT)
+                    .clickable(
+                        interactionSource = interactionSource,
+                        indication = rememberPressHighlight(
+                            color = CARD_ACTION_FOREGROUND,
+                            maxAlpha = 0.12f,
+                        ),
+                        onClick = { onAction(action) },
+                    )
+                    .padding(horizontal = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = action.icon,
+                    contentDescription = null,
+                    tint = CARD_ACTION_FOREGROUND,
+                    modifier = Modifier.size(CARD_ACTION_ICON),
+                )
+                Box(Modifier.width(11.dp))
+                Text(
+                    text = action.label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = CARD_ACTION_FOREGROUND,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .weight(1f)
+                        // Nhãn dài chạy liên tục từ phải sang trái; icon luôn đứng yên.
+                        .basicMarquee(
+                            iterations = Int.MAX_VALUE,
+                            initialDelayMillis = 0,
+                            repeatDelayMillis = 0,
+                        ),
+                )
+            }
+        }
     }
 }

@@ -3,10 +3,6 @@ package com.antimobile.callhs.ui.blocking
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
@@ -71,6 +67,7 @@ import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.NotificationsOff
 import androidx.compose.material.icons.rounded.Phone
 import androidx.compose.material.icons.rounded.PhoneDisabled
+import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Settings
@@ -155,10 +152,12 @@ import com.antimobile.callhs.ui.calllist.DayFilterSheet
 import com.antimobile.callhs.ui.components.ActionGlyph
 import com.antimobile.callhs.ui.components.AppBottomSheet
 import com.antimobile.callhs.ui.components.ContextAction
+import com.antimobile.callhs.ui.components.ContextCardAction
 import com.antimobile.callhs.ui.components.ContextMenuOverlay
-import com.antimobile.callhs.ui.components.ContextTextAction
 import com.antimobile.callhs.ui.components.FilterOptionRow
 import com.antimobile.callhs.ui.components.FrostedScrollButton
+import com.antimobile.callhs.ui.components.GearIndexBar
+import com.antimobile.callhs.ui.components.GearIndexItem
 import com.antimobile.callhs.ui.components.PanelCard
 import com.antimobile.callhs.ui.components.Segmented
 import com.antimobile.callhs.ui.components.rememberPressHighlight
@@ -187,6 +186,7 @@ import java.time.ZoneId
 
 private data class RuleMenuTarget(val rule: CallBlockRule, val bounds: Rect)
 private data class HistoryMenuTarget(val row: BlockedCallHistory, val bounds: Rect)
+private data class HistoryDateScrollTarget(val date: LocalDate, val itemIndex: Int)
 private data class FeatureMenuTarget(val feature: MainBlockFeature, val bounds: Rect)
 private data class ScheduleMenuTarget(
     val window: CallBlockTimeWindow,
@@ -306,6 +306,25 @@ fun CallBlockScreen(
             BlockTopBar(
                 title = s.screenTitle,
                 onBack = onBack,
+                statusActionIcon = Icons.Rounded.PowerSettingsNew,
+                statusActionContentDescription = if (scheduledAction != null) {
+                    s.openSettings
+                } else if (protectionEffective) {
+                    s.disableProtectionAction
+                } else {
+                    s.enableProtectionAction
+                },
+                statusActionTint = if (protectionEffective) Primary else AccentRed,
+                onStatusAction = {
+                    if (scheduledAction != null) {
+                        onOpenSettings()
+                    } else {
+                        val clickedAt = System.currentTimeMillis()
+                        nowMillis = clickedAt
+                        // setEnabled(true) cũng huỷ một phiên tạm dừng, nên màu xanh luôn đồng nghĩa đang bảo vệ thật.
+                        CallBlockSettings.setEnabled(context, !protectionEffective, clickedAt)
+                    }
+                },
                 settingsContentDescription = s.openSettings,
                 onOpenSettings = onOpenSettings,
             )
@@ -350,50 +369,6 @@ fun CallBlockScreen(
                     modifier = Modifier.weight(1f),
                 )
             }
-        }
-
-        // FAB bật/tắt bảo vệ — cùng kích thước/vị trí với FAB bàn phím ở CallListScreen.
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(
-                    end = 20.dp,
-                    bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp,
-                )
-                .size(60.dp)
-                .clip(CircleShape)
-                .background(
-                    when (scheduledAction) {
-                        CallBlockScheduleAction.BLOCK -> AccentRed
-                        CallBlockScheduleAction.PAUSE -> AccentBlue
-                        null -> if (protectionEffective) AccentGreen else AccentRed
-                    }
-                )
-                .clickable {
-                    if (scheduledAction != null) {
-                        onOpenSettings()
-                        return@clickable
-                    }
-                    val clickedAt = System.currentTimeMillis()
-                    nowMillis = clickedAt
-                    // setEnabled(true) cũng huỷ một phiên tạm dừng, nên màu xanh luôn đồng nghĩa đang bảo vệ thật.
-                    CallBlockSettings.setEnabled(context, !protectionEffective, clickedAt)
-                },
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = if (scheduledAction != null) Icons.Rounded.Schedule
-                else if (protectionEffective) Icons.Rounded.Phone else Icons.Rounded.PhoneDisabled,
-                contentDescription = if (scheduledAction != null) {
-                    s.openSettings
-                } else if (protectionEffective) {
-                    s.disableProtectionAction
-                } else {
-                    s.enableProtectionAction
-                },
-                tint = Color.White,
-                modifier = Modifier.size(26.dp),
-            )
         }
 
         featureMenuTarget?.let { target ->
@@ -453,44 +428,46 @@ fun CallBlockScreen(
         historyTarget?.let { target ->
             ContextMenuOverlay(
                 bounds = target.bounds,
-                actions = listOf(
-                    ContextAction(
-                        ActionGlyph.Vector(Icons.Rounded.Delete, AccentRed),
-                        s.menuDeleteHistory,
-                    ) { vm.deleteHistory(target.row.id) }
-                ),
-                textActions = if (CallHistoryRuleCodec.isSelectableNumber(target.row.rawNumber)) {
-                    listOf(
-                        ContextTextAction(
-                            label = s.addToAllowlist,
-                            tint = AccentGreen,
-                            onClick = {
-                                vm.saveNumberEntry(
-                                    action = CallBlockAction.ALLOW,
-                                    rawNumber = target.row.rawNumber,
-                                    displayName = "",
-                                    origin = NumberEntryOrigin.CALL_LOG_PICKER,
-                                )
-                            },
-                        ),
-                        ContextTextAction(
-                            label = s.addToBlocklist,
-                            tint = AccentRed,
-                            onClick = {
-                                vm.saveNumberEntry(
-                                    action = CallBlockAction.BLOCK,
-                                    rawNumber = target.row.rawNumber,
-                                    displayName = "",
-                                    origin = NumberEntryOrigin.CALL_LOG_PICKER,
-                                )
-                            },
-                        ),
+                actions = emptyList(),
+                cardActions = buildList {
+                    add(
+                        ContextCardAction(
+                            icon = Icons.Rounded.Delete,
+                            label = s.menuDeleteHistory,
+                            onClick = { vm.deleteHistory(target.row.id) },
+                        )
                     )
-                } else {
-                    // SIP/alphanumeric caller IDs cannot become exact-number list entries.
-                    emptyList()
+                    if (CallHistoryRuleCodec.isSelectableNumber(target.row.rawNumber)) {
+                        add(
+                            ContextCardAction(
+                                icon = Icons.Rounded.Phone,
+                                label = s.addToAllowlist,
+                                onClick = {
+                                    vm.saveNumberEntry(
+                                        action = CallBlockAction.ALLOW,
+                                        rawNumber = target.row.rawNumber,
+                                        displayName = "",
+                                        origin = NumberEntryOrigin.CALL_LOG_PICKER,
+                                    )
+                                },
+                            )
+                        )
+                        add(
+                            ContextCardAction(
+                                icon = Icons.Rounded.Block,
+                                label = s.addToBlocklist,
+                                onClick = {
+                                    vm.saveNumberEntry(
+                                        action = CallBlockAction.BLOCK,
+                                        rawNumber = target.row.rawNumber,
+                                        displayName = "",
+                                        origin = NumberEntryOrigin.CALL_LOG_PICKER,
+                                    )
+                                },
+                            )
+                        )
+                    }
                 },
-                stackTextActions = true,
                 topInsetPx = topInset,
                 bottomInsetPx = bottomInset,
                 onClosed = { historyTarget = null },
@@ -803,6 +780,10 @@ private fun CallBlockRoleGate(onBack: () -> Unit, onEnable: () -> Unit) {
 internal fun BlockTopBar(
     title: String,
     onBack: () -> Unit,
+    statusActionIcon: ImageVector? = null,
+    statusActionContentDescription: String? = null,
+    statusActionTint: Color = TextSecondary,
+    onStatusAction: (() -> Unit)? = null,
     settingsContentDescription: String? = null,
     onOpenSettings: (() -> Unit)? = null,
 ) {
@@ -827,6 +808,19 @@ internal fun BlockTopBar(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
+        if (statusActionIcon != null && onStatusAction != null) {
+            Box(
+                modifier = Modifier.size(44.dp).clip(CircleShape).clickable(onClick = onStatusAction),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = statusActionIcon,
+                    contentDescription = statusActionContentDescription,
+                    tint = statusActionTint,
+                    modifier = Modifier.size(25.dp),
+                )
+            }
+        }
         if (onOpenSettings != null) {
             Box(
                 modifier = Modifier.size(44.dp).clip(CircleShape).clickable(onClick = onOpenSettings),
@@ -1623,7 +1617,10 @@ private fun RulesTab(
     ) }
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 96.dp),
+        // FAB bật/tắt đã nằm trên top bar, nên tab Quy tắc không còn phải chừa đáy cho FAB.
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+            bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp,
+        ),
     ) {
         item {
             ProcessingGuideCard(onClick = onOpenProcessingGuide)
@@ -1878,7 +1875,8 @@ private fun HistoryTab(
     onLongPress: (BlockedCallHistory, Rect) -> Unit,
     modifier: Modifier,
 ) {
-    val s = appStrings().blocker
+    val strings = appStrings()
+    val s = strings.blocker
     if (rows.isEmpty()) {
         Column(modifier = modifier.fillMaxSize()) { EmptyBlockCard(s.emptyHistory) }
         return
@@ -1905,17 +1903,75 @@ private fun HistoryTab(
     val groupedRows = analytics.rows.groupBy { row ->
         Instant.ofEpochMilli(row.blockedAt).atZone(zone).toLocalDate()
     }
+    val dateScrollTargets = remember(
+        groupedRows,
+        reasonCounts.isNotEmpty(),
+        analytics.topNumbers.isNotEmpty(),
+    ) {
+        var itemIndex = 7 +
+            (if (reasonCounts.isNotEmpty()) 2 else 0) +
+            (if (analytics.topNumbers.isNotEmpty()) 2 else 0)
+        groupedRows.map { (date, dayRows) ->
+            HistoryDateScrollTarget(date = date, itemIndex = itemIndex).also {
+                itemIndex += 1 + dayRows.size
+            }
+        }
+    }
+    val dateIndexItems = when (period) {
+        StatsPeriod.DAY -> emptyList()
+        StatsPeriod.WEEK -> dateScrollTargets.map { target ->
+            val shortLabel = strings.callList.weekdayHeaders[target.date.dayOfWeek.value - 1]
+            GearIndexItem(
+                key = target.date.toString(),
+                label = shortLabel,
+                bubbleLabel = shortLabel,
+            )
+        }
+        StatsPeriod.MONTH -> dateScrollTargets.map { target ->
+            val dayNumber = "%02d".format(target.date.dayOfMonth)
+            GearIndexItem(
+                key = target.date.toString(),
+                label = dayNumber,
+                bubbleLabel = dayNumber,
+            )
+        }
+    }
     val listState = rememberLazyListState()
     val scrollScope = rememberCoroutineScope()
     val backdropLayer = rememberGraphicsLayer()
     var historyContentCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
-    val showScrollTop by remember {
-        derivedStateOf { listState.firstVisibleItemIndex > 4 }
+    val canScrollUp by remember {
+        derivedStateOf { listState.canScrollBackward }
     }
-    val showScrollBottom by remember {
+    val canScrollDown by remember {
         derivedStateOf { listState.canScrollForward }
     }
-    val showScrollControls = showScrollTop || showScrollBottom
+    val showDayScrollControls = period == StatsPeriod.DAY
+    val currentDateIndexKey by remember(dateScrollTargets) {
+        derivedStateOf {
+            if (dateScrollTargets.isEmpty()) {
+                null
+            } else {
+                val info = listState.layoutInfo
+                val visibleItems = info.visibleItemsInfo
+                val referenceIndex = when {
+                    visibleItems.isEmpty() -> listState.firstVisibleItemIndex
+                    listState.canScrollBackward && !listState.canScrollForward ->
+                        dateScrollTargets.last().itemIndex
+                    listState.canScrollBackward &&
+                        visibleItems.last().index >= info.totalItemsCount - 1 -> {
+                        val center = (info.viewportStartOffset + info.viewportEndOffset) / 2
+                        visibleItems.minByOrNull { item ->
+                            kotlin.math.abs((item.offset + item.size / 2) - center)
+                        }?.index ?: listState.firstVisibleItemIndex
+                    }
+                    else -> listState.firstVisibleItemIndex
+                }
+                (dateScrollTargets.lastOrNull { it.itemIndex <= referenceIndex }
+                    ?: dateScrollTargets.first()).date.toString()
+            }
+        }
+    }
     val navigationBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -1925,16 +1981,16 @@ private fun HistoryTab(
                 .fillMaxSize()
                 .onGloballyPositioned { historyContentCoords = it }
                 .drawWithContent {
-                    if (showScrollControls) {
+                    if (showDayScrollControls) {
                         backdropLayer.record { this@drawWithContent.drawContent() }
                         drawLayer(backdropLayer)
                     } else {
                         drawContent()
                     }
                 },
-            // Chừa đáy như CallListScreen để item cuối không bị nút cuộn che.
+            // Giữ khoảng thở với thanh điều hướng; mục lục ngày nổi ở giữa mép phải.
             contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                bottom = navigationBottom + 96.dp,
+                bottom = navigationBottom + 24.dp,
             ),
         ) {
             item("history-period") {
@@ -1985,40 +2041,35 @@ private fun HistoryTab(
             }
         }
 
-        // Đầu danh sách: chỉ có nút xuống cuối; giữa danh sách: có cả hai; cuối danh sách: chỉ còn nút lên đầu.
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                // Cùng trục với FAB và nằm ngay phía trên FAB như mẫu CallListScreen.
-                .padding(end = 26.dp, bottom = navigationBottom + 24.dp + 60.dp + 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            AnimatedVisibility(
-                visible = showScrollTop,
-                enter = fadeIn() + scaleIn(initialScale = 0.7f),
-                exit = fadeOut() + scaleOut(targetScale = 0.7f),
+        if (showDayScrollControls) {
+            // Luôn giữ nguyên hai vị trí để không bị nhảy khi chạm đầu/cuối danh sách.
+            Column(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 FrostedScrollButton(
                     icon = Icons.Rounded.KeyboardArrowUp,
-                    contentDescription = appStrings().callList.scrollToTop,
+                    contentDescription = strings.callList.scrollToTop,
                     backdropLayer = backdropLayer,
                     contentCoords = historyContentCoords,
+                    enabled = canScrollUp,
+                    buttonSize = 40.dp,
+                    iconSize = 24.dp,
                     onClick = {
                         scrollScope.launch { listState.animateScrollToItem(0) }
                     },
                 )
-            }
-            AnimatedVisibility(
-                visible = showScrollBottom,
-                enter = fadeIn() + scaleIn(initialScale = 0.7f),
-                exit = fadeOut() + scaleOut(targetScale = 0.7f),
-            ) {
                 FrostedScrollButton(
                     icon = Icons.Rounded.KeyboardArrowDown,
-                    contentDescription = appStrings().callList.scrollToBottom,
+                    contentDescription = strings.callList.scrollToBottom,
                     backdropLayer = backdropLayer,
                     contentCoords = historyContentCoords,
+                    enabled = canScrollDown,
+                    buttonSize = 40.dp,
+                    iconSize = 24.dp,
                     onClick = {
                         scrollScope.launch {
                             val lastIndex = (listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0)
@@ -2027,6 +2078,21 @@ private fun HistoryTab(
                     },
                 )
             }
+        } else if (dateIndexItems.isNotEmpty()) {
+            GearIndexBar(
+                items = dateIndexItems,
+                currentKey = currentDateIndexKey,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 6.dp, top = 6.dp, bottom = 6.dp),
+                // Không phủ cụm chọn Ngày/Tuần/Tháng và thẻ khoảng thời gian ở đầu tab.
+                contentTopPadding = 196.dp,
+                onFocusKey = { key ->
+                    dateScrollTargets.firstOrNull { it.date.toString() == key }?.let { target ->
+                        scrollScope.launch { listState.scrollToItem(target.itemIndex) }
+                    }
+                },
+            )
         }
     }
 

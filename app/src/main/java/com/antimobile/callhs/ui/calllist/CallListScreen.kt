@@ -914,7 +914,7 @@ private fun RoundIconButton(icon: ImageVector, desc: String, tint: Color, onClic
 
 /**
  * Nút tròn "LÊN ĐẦU DANH SÁCH" dạng KÍNH MỜ (frosted glass): nền BLUR nội dung danh sách bên dưới +
- * lớp kính XÁM mờ phủ lên để icon TRẮNG (mũi tên lên) nổi rõ. Đặt ngay trên FAB.
+ * lớp kính XÁM rất nhạt phủ lên để vẫn nhìn xuyên nội dung bên dưới. Đặt ngay trên FAB.
  *
  * Cách blur nền THẬT (backdrop blur) không cần thư viện ngoài:
  *  1) [Column] danh sách đã GHI (record) toàn bộ nội dung vào [backdropLayer].
@@ -952,10 +952,10 @@ private fun ScrollToTopButton(
                         }
                     }
                     drawLayer(blurLayer)
-                    // Lớp kính XÁM mờ phủ lên nền đã blur → icon trắng nổi rõ mà vẫn thấy nội dung mờ.
+                    // Lớp kính rất nhạt phủ lên nền đã blur → vẫn thấy rõ nội dung mờ phía sau.
                     drawRect(color = ScrollTopScrim)
                 } else {
-                    // < Android 12 (không blur được) hoặc chưa đo xong toạ độ → nền xám gần đặc cho gọn.
+                    // < Android 12 không blur được: dùng fallback bán trong suốt, không tạo mảng xám đặc.
                     drawRect(color = ScrollTopSolid)
                 }
             }
