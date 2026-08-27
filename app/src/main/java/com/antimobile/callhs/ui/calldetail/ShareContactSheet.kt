@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import com.antimobile.callhs.data.model.CallNumberDetail
 import com.antimobile.callhs.i18n.appStrings
 import com.antimobile.callhs.ui.components.AppBottomSheet
+import com.antimobile.callhs.ui.components.AppToastType
 import com.antimobile.callhs.ui.components.Avatar
 import com.antimobile.callhs.ui.components.PanelCard
 import com.antimobile.callhs.ui.components.SheetCloseButton
@@ -112,7 +113,7 @@ fun ShareContactSheet(detail: CallNumberDetail, onDismiss: () -> Unit) {
                     // Tên chia sẻ: tên danh bạ; số khẩn cấp chưa lưu thì dùng tên mặc định (Cảnh sát/Cứu hoả/Cấp cứu).
                     val shareName = detail.cachedName ?: SpecialNumbers.name(detail.number)
                     val ok = ShareContact.shareText(context, shareName, detail.number)
-                    if (!ok) CallActions.toast(context, appStrings().shareSheet.invalidNumber)
+                    if (!ok) CallActions.toast(context, appStrings().shareSheet.invalidNumber, AppToastType.Error)
                     close()
                 },
                 onContactQr = { step = ShareStep.ContactQr },
@@ -556,7 +557,11 @@ private fun QrActionRow(bitmap: Bitmap, accent: Color) {
                         QrShare.saveToGallery(appContext, bitmap, "CallHS_QR_${System.currentTimeMillis()}.png")
                     }
                     saving = false
-                    CallActions.toast(appContext, if (uri != null) appStrings().shareSheet.savedToGallery else appStrings().shareSheet.saveFailed)
+                    CallActions.toast(
+                        appContext,
+                        if (uri != null) appStrings().shareSheet.savedToGallery else appStrings().shareSheet.saveFailed,
+                        if (uri != null) AppToastType.Success else AppToastType.Error
+                    )
                 }
             }
         }
@@ -572,7 +577,7 @@ private fun QrActionRow(bitmap: Bitmap, accent: Color) {
             scope.launch {
                 val ok = ShareContact.shareBitmap(context, bitmap)
                 sharing = false
-                if (!ok) CallActions.toast(appContext, appStrings().shareSheet.shareFailed)
+                if (!ok) CallActions.toast(appContext, appStrings().shareSheet.shareFailed, AppToastType.Error)
             }
         }
     }

@@ -72,6 +72,7 @@ import androidx.core.app.ActivityCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.antimobile.callhs.ui.components.PanelCard
+import com.antimobile.callhs.ui.components.AppToastType
 import com.antimobile.callhs.ui.components.rememberPressHighlight
 import com.antimobile.callhs.ui.theme.AccentGreenBg
 import com.antimobile.callhs.ui.theme.AppBackground
@@ -415,7 +416,7 @@ private fun ConsentStepScreen(
                     role = Role.Button
                 ) {
                     if (agreed) onAccepted()
-                    else CallActions.toast(context, appStrings().permission.consentRequired)
+                    else CallActions.toast(context, appStrings().permission.consentRequired, AppToastType.Warning)
                 }
                 .padding(vertical = 15.dp),
             contentAlignment = Alignment.Center
@@ -559,5 +560,5 @@ private fun Context.openAppSettings() {
             Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null))
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         )
-    }.onFailure { CallActions.toast(this, appStrings().common.appSettingsOpenFailed) }
+    }.onFailure { CallActions.toast(this, appStrings().common.appSettingsOpenFailed, AppToastType.Error) }
 }

@@ -29,6 +29,7 @@ interface AppStrings {
     val timeline: TimelineStrings
     val contacts: ContactsStrings
     val settings: SettingsStrings
+    val outgoingCall: OutgoingCallStrings
     val fontSize: FontSizeStrings
     val repeatStats: RepeatStatsStrings
     val detailedStats: DetailedStatsStrings
@@ -395,6 +396,65 @@ interface SettingsStrings {
     // Bottom sheet chọn danh bạ cơ quan
     val pickerTitle: String
     val pickerNote: String
+}
+
+/** Chuỗi của tính năng CẢNH BÁO CUỘC GỌI ĐI — độc lập với màn/cài đặt chặn cuộc gọi. */
+interface OutgoingCallStrings {
+    // Item riêng ở màn Cài đặt chính
+    val settingsSection: String
+    val settingsTitle: String
+    val settingsSubtitle: String
+    val settingsOpen: String
+
+    // Màn cài đặt tính năng
+    val screenTitle: String
+    val activationSection: String
+    val enabledTitle: String
+    val enabledSubtitle: String
+    val roleGateTitle: String
+    val roleGateBody: String
+    val roleGateAction: String
+    val roleUnavailableTitle: String
+    val roleUnavailableBody: String
+    val roleActive: String
+    val roleRequired: String
+    val roleUnavailable: String
+    val roleExplanation: String
+    val conditionsSection: String
+    val offNetworkTitle: String
+    val offNetworkSubtitle: String
+    val simPermissionTitle: String
+    val simPermissionSubtitle: String
+    val grantSimPermission: String
+    val blocklistTitle: String
+    val blocklistSubtitle: String
+    val allowlistTitle: String
+    val allowlistSubtitle: String
+    val presentationSection: String
+    val presentationTitle: String
+    val headsUpTitle: String
+    val headsUpSubtitle: String
+    val overlayTitle: String
+    val overlaySubtitle: String
+    val overlayPermissionTitle: String
+    val overlayPermissionSubtitle: String
+    val grantOverlayPermission: String
+    val notificationPermissionTitle: String
+    val notificationPermissionSubtitle: String
+    val grantNotificationPermission: String
+    val openNotificationSettings: String
+    val privacyNote: String
+
+    // Nội dung runtime cho notification / popup AppDialog-style
+    val notificationChannelName: String
+    val notificationChannelDescription: String
+    val alertBlocklistTitle: String
+    val alertOffNetworkTitle: String
+    val alertAllowlistTitle: String
+    val reasonBlocklist: String
+    val reasonAllowlist: String
+    fun reasonOffNetwork(simCarrier: String, targetCarrier: String): String
+    val close: String
 }
 
 /**
@@ -1108,7 +1168,8 @@ interface CategoryStrings {
 /**
  * Chuỗi màn SAO LƯU & KHÔI PHỤC (BackupScreen) + thẻ mở màn ở Cài đặt.
  *
- * Phủ các mảng dữ liệu app tự quản: mẫu tin nhắn, QR, nhóm, bộ chặn, số của tôi và cài đặt hiển thị.
+ * Phủ các mảng dữ liệu app tự quản: mẫu tin nhắn, QR, nhóm, bộ chặn, số của tôi, cài đặt cuộc gọi đi
+ * và cài đặt hiển thị.
  * Nhật ký cuộc gọi hệ thống là chỉ-đọc nên không được sao lưu; lịch sử chặn do CallHS tự ghi thì có.
  */
 interface BackupStrings {
@@ -1162,6 +1223,8 @@ interface BackupStrings {
     val secBlockHistorySub: String
     val secMyNumber: String
     val secMyNumberSub: String
+    val secOutgoingCall: String
+    val secOutgoingCallSub: String
     val secDisplay: String
     val secDisplaySub: String
     fun itemsCount(n: Int): String     // "12 mục"
@@ -1496,7 +1559,6 @@ interface CallBlockStrings {
     val typeContacts: String
     val typeCallHistory: String
     val typeCountryAndAreaCode: String
-    val typeBrandName: String
     val specialTitle: String
     val specialPrivate: String
     val specialPrivateDesc: String
@@ -1513,25 +1575,10 @@ interface CallBlockStrings {
     val learnSip: String
     val learnUri: String
     val learnCli: String
-    val learnCnam: String
     val voipExplanation: String
     val sipExplanation: String
     val uriExplanation: String
     val cliExplanation: String
-    val cnamExplanation: String
-    val brandNamePickerTitle: String
-    val brandNamePickerOpen: String
-    val brandNameCaseSensitiveNote: String
-    val brandNameInputHint: String
-    val brandNameAdd: String
-    fun brandNameSelectedCount(count: Int, max: Int): String
-    val brandNameTelecomCategory: String
-    val brandNameBankCategory: String
-    val brandNameWalletCategory: String
-    val brandNameServiceCategory: String
-    val brandNameSpamCategory: String
-    val brandNameSpamDisclaimer: String
-    val brandNameAndroidLimit: String
     val specialAndroidLimit: String
     val contactPickerTitle: String
     val contactPickerOpen: String
@@ -1552,7 +1599,6 @@ interface CallBlockStrings {
     val callHistoryPickerPreviouslySelected: String
     val callHistoryPickerPreviouslySelectedNote: String
     val validationSelectSpecial: String
-    val validationSelectBrandName: String
     val validationSelectContact: String
     val validationSelectCallHistory: String
     val regionPickerTitle: String

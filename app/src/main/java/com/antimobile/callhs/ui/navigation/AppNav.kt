@@ -61,6 +61,7 @@ import com.antimobile.callhs.ui.settings.MyNumberScreen
 import com.antimobile.callhs.ui.settings.QrScanHistoryScreen
 import com.antimobile.callhs.ui.settings.SettingsScreen
 import com.antimobile.callhs.ui.settings.ThemeScreen
+import com.antimobile.callhs.ui.outgoing.OutgoingCallSettingsScreen
 import com.antimobile.callhs.ui.stats.DetailedStatsScreen
 import com.antimobile.callhs.ui.stats.DetailedStatsViewModel
 
@@ -81,6 +82,7 @@ private object Routes {
     const val FONT_SIZE = "fontsize"
     const val LANGUAGE = "language"
     const val THEME = "theme"
+    const val OUTGOING_CALL_SETTINGS = "outgoing-call/settings"
     const val DIRECTORY = "directory/{dataset}"
     fun directory(datasetKey: String) = "directory/$datasetKey"
     const val LEGAL = "legal/{doc}"
@@ -269,6 +271,9 @@ fun AppNav() {
                 onOpenLegal = { doc -> whenResumed { nav.navigate(Routes.legal(doc)) } },
                 onOpenCategories = { whenResumed { nav.navigate(Routes.CATEGORIES) } },
                 onOpenCallBlocking = { whenResumed { nav.navigate(Routes.CALL_BLOCK) } },
+                onOpenOutgoingCallSettings = {
+                    whenResumed { nav.navigate(Routes.OUTGOING_CALL_SETTINGS) }
+                },
                 onOpenBackup = { whenResumed { nav.navigate(Routes.BACKUP) } },
                 onOpenDonate = { whenResumed { nav.navigate(Routes.DONATE) } }
             )
@@ -332,6 +337,16 @@ fun AppNav() {
             popExitTransition = { slideOutHorizontally(tween(300)) { it } + fadeOut(tween(300)) }
         ) {
             ThemeScreen(onBack = { nav.popBackStack() })
+        }
+
+        composable(
+            route = Routes.OUTGOING_CALL_SETTINGS,
+            enterTransition = { slideInHorizontally(tween(300)) { it } + fadeIn(tween(300)) },
+            exitTransition = { slideOutHorizontally(tween(300)) { -it / 4 } + fadeOut(tween(300)) },
+            popEnterTransition = { slideInHorizontally(tween(300)) { -it / 4 } + fadeIn(tween(300)) },
+            popExitTransition = { slideOutHorizontally(tween(300)) { it } + fadeOut(tween(300)) },
+        ) {
+            OutgoingCallSettingsScreen(onBack = { nav.popBackStack() })
         }
 
         composable(

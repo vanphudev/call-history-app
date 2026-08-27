@@ -2,7 +2,6 @@ package com.antimobile.callhs.i18n
 
 import com.antimobile.callhs.data.blocking.ContactRuleCodec
 import com.antimobile.callhs.data.blocking.CallHistoryRuleCodec
-import com.antimobile.callhs.data.blocking.BrandNameRuleCodec
 import com.antimobile.callhs.data.blocking.GeographicBlockOption
 import com.antimobile.callhs.data.blocking.SpecialCallCondition
 import java.time.DayOfWeek
@@ -20,6 +19,7 @@ object EnStrings : AppStrings {
     override val timeline: TimelineStrings = Timeline
     override val contacts: ContactsStrings = Contacts
     override val settings: SettingsStrings = Settings
+    override val outgoingCall: OutgoingCallStrings = OutgoingCall
     override val fontSize: FontSizeStrings = FontSize
     override val repeatStats: RepeatStatsStrings = RepeatStats
     override val detailedStats: DetailedStatsStrings = DetailedStats
@@ -350,6 +350,70 @@ object EnStrings : AppStrings {
         override val pickerTitle = "Choose an agency directory"
         override val pickerNote =
             "Data is downloaded from the official GitHub page, stored on your device and refreshed at most once every 7 days. More provinces/cities will be added later."
+    }
+
+    private object OutgoingCall : OutgoingCallStrings {
+        override val settingsSection = "Outgoing calls"
+        override val settingsTitle = "Outgoing-call alerts"
+        override val settingsSubtitle = "Off-net · Blocklist · Allowlist"
+        override val settingsOpen = "Open outgoing-call settings"
+
+        override val screenTitle = "Outgoing-call settings"
+        override val activationSection = "Activation"
+        override val enabledTitle = "Detect outgoing calls"
+        override val enabledSubtitle = "Show an alert when you call from the default Phone app"
+        override val roleGateTitle = "Enable outgoing-call alerts"
+        override val roleGateBody =
+            "Android needs you to choose CallHS as the call-redirection app. This access only lets CallHS receive the number and SIM before dialing so it can show an alert; CallHS always keeps the number unchanged and never redirects or blocks outgoing calls."
+        override val roleGateAction = "Choose CallHS for call detection"
+        override val roleUnavailableTitle = "Not supported on this device"
+        override val roleUnavailableBody =
+            "This device does not provide Android's call-redirection role, so CallHS cannot detect outgoing calls."
+        override val roleActive = "Android has allowed call identification"
+        override val roleRequired = "Android call-identification access is required"
+        override val roleUnavailable = "Call identification isn't supported on this device"
+        override val roleExplanation =
+            "Android grants an outgoing-call role so CallHS receives the number and selected SIM before dialing. CallHS always keeps the number unchanged and never blocks outgoing calls."
+        override val conditionsSection = "Notify when"
+        override val offNetworkTitle = "Calling an off-net number"
+        override val offNetworkSubtitle = "Alerts only when both the calling SIM and destination carrier are known"
+        override val simPermissionTitle = "SIM information access is missing"
+        override val simPermissionSubtitle =
+            "Phone access is used only to identify the carrier of the calling SIM. Call-log access is not required."
+        override val grantSimPermission = "Grant SIM access"
+        override val blocklistTitle = "Number is on the blocklist"
+        override val blocklistSubtitle = "Uses the existing exact-number blocklist even when call blocking is off"
+        override val allowlistTitle = "Number is on the allowlist"
+        override val allowlistSubtitle = "Quickly confirms that the outgoing number is on your allowlist"
+        override val presentationSection = "Presentation"
+        override val presentationTitle = "Alert style"
+        override val headsUpTitle = "Heads-up notification"
+        override val headsUpSubtitle = "Appears at the top and remains in the notification shade"
+        override val overlayTitle = "Popup over other apps"
+        override val overlaySubtitle = "Shows an AppDialog-style popup over the active call screen"
+        override val overlayPermissionTitle = "Display-over-other-apps access is missing"
+        override val overlayPermissionSubtitle =
+            "Until it is granted, CallHS falls back to a heads-up notification."
+        override val grantOverlayPermission = "Grant display access"
+        override val notificationPermissionTitle = "Heads-up alerts aren't ready"
+        override val notificationPermissionSubtitle =
+            "Allow notifications and keep the alert channel at high priority so heads-up can appear."
+        override val grantNotificationPermission = "Allow notifications"
+        override val openNotificationSettings = "Open notification settings"
+        override val privacyNote =
+            "The number and carrier information are processed only on your device. CallHS never redirects, changes, or places the call."
+
+        override val notificationChannelName = "Outgoing-call alerts"
+        override val notificationChannelDescription =
+            "Off-net and list-status alerts when the user starts an outgoing call"
+        override val alertBlocklistTitle = "Blocklisted-number warning"
+        override val alertOffNetworkTitle = "Off-net call warning"
+        override val alertAllowlistTitle = "Allowlisted number"
+        override val reasonBlocklist = "This number is on your blocklist."
+        override val reasonAllowlist = "This number is on your allowlist."
+        override fun reasonOffNetwork(simCarrier: String, targetCarrier: String) =
+            "Off-net call: $simCarrier → $targetCarrier."
+        override val close = "Close"
     }
 
     private object FontSize : FontSizeStrings {
@@ -1277,7 +1341,7 @@ object EnStrings : AppStrings {
             4 -> "No notification appears after a block"
             5 -> "A notification has no sound, vibration, or heads-up alert"
             6 -> "A call is missing from blocked-call history"
-            else -> "Private, VoIP, or brand-name calls are not blocked"
+            else -> "Private or VoIP calls are not blocked"
         }
         override fun commonIssueCause(issue: Int) = when (issue) {
             1 -> "CallHS may no longer be the call-screening app, or Call protection may be off, paused, or inside a scheduled pause. Android may also stop sending calls to CallHS after the app is force-stopped or before the first unlock following a restart."
@@ -1286,7 +1350,7 @@ object EnStrings : AppStrings {
             4 -> "Notifications may be off in CallHS, disabled for the current scheduled period, denied by Android, or disabled for the notification channel. Only a call that is actually blocked creates an alert; Silence only and Allow through do not create blocked-call alerts."
             5 -> "Sound, vibration, or the display style may be off in Advanced notification settings. Do Not Disturb, channel importance, and device-maker notification controls can also limit the alert."
             6 -> "CallHS history records only calls that were actually blocked. Allowed and silence-only calls are not recorded there, and blocked-call history is not a copy of Android's system call log."
-            else -> "Standard Android generally sends a screening app only calls with a valid, visible telephone number. Private or unavailable callers, VoIP/SIP calls, and brand names depend on the Phone app and device-maker extensions, so they may never reach CallHS."
+            else -> "Standard Android generally sends a screening app only calls with a valid, visible telephone number. Private or unavailable callers and VoIP/SIP calls depend on the Phone app and device-maker extensions, so they may never reach CallHS."
         }
         override fun commonIssueFix(issue: Int) = when (issue) {
             1 -> "Reopen CallHS, grant the call-blocking role again, and turn on Call protection. Check enabled/pause schedules; after a restart, unlock the device at least once."
@@ -1406,7 +1470,6 @@ object EnStrings : AppStrings {
         override val typeContacts = "From contacts"
         override val typeCallHistory = "From call history"
         override val typeCountryAndAreaCode = "Countries & Vietnam prefixes"
-        override val typeBrandName = "By Brandname"
         override val specialTitle = "Choose one call type"
         override val specialPrivate = "Hidden-number calls"
         override val specialPrivateDesc =
@@ -1426,7 +1489,6 @@ object EnStrings : AppStrings {
         override val learnSip = "What is SIP?"
         override val learnUri = "What is a URI?"
         override val learnCli = "What is CLI?"
-        override val learnCnam = "What is CNAM?"
         override val voipExplanation =
             "VoIP (Voice over Internet Protocol) carries voice over an IP network such as Wi-Fi, 4G/5G, or the Internet instead of relying only on a traditional voice network.\n\n" +
                 "A VoIP call may display a regular phone number or a SIP identity. VoIP describes how a call is transported; it does not by itself mean that the call is spam or a scam.\n\n" +
@@ -1441,27 +1503,7 @@ object EnStrings : AppStrings {
                 "CallHS classifies a SIP condition only when the URI is valid, uses the sip: or sips: scheme, and contains a user before @."
         override val cliExplanation =
             "CLI (Calling Line Identification) is the caller's phone-number information supplied by the network or calling service, for example +84912345678. CallHS uses CLI for rules based on a number, prefix, suffix, length, carrier, or region.\n\n" +
-                "CLI differs from CNAM, which is a caller name, and from a name saved by the user in Contacts. CLI can be hidden or spoofed, so the displayed number does not guarantee the caller's true identity."
-        override val cnamExplanation =
-            "CNAM (Calling Name) is a caller name supplied by the network or calling service for display, such as Vietcombank. CallHS uses this data for Brandname rules.\n\n" +
-                "CNAM is neither CLI nor contactDisplayName—the name a user saves in Contacts. Renaming a contact on the device does not change CNAM.\n\n" +
-                "Standard CallScreeningService does not provide callerDisplayName. CallHS can match a Brandname only when the device or manufacturer extends the callback and delivers that name to the app."
-        override val brandNamePickerTitle = "Choose Brandnames"
-        override val brandNamePickerOpen = "Choose or enter Brandnames"
-        override val brandNameCaseSensitiveNote =
-            "Up to 5 names. For example, “Vietcombank” differs from “VIETCOMBANK”. Choose a suggestion or enter your own."
-        override val brandNameInputHint = "Enter the exact Brandname"
-        override val brandNameAdd = "Add"
-        override fun brandNameSelectedCount(count: Int, max: Int) = "$count/$max names selected"
-        override val brandNameTelecomCategory = "Telecom carriers"
-        override val brandNameBankCategory = "Banks"
-        override val brandNameWalletCategory = "E-wallets"
-        override val brandNameServiceCategory = "Services & agencies"
-        override val brandNameSpamCategory = "Spam/scam warning labels"
-        override val brandNameSpamDisclaimer =
-            "These are common warning labels, not a verified registry of malicious Brandnames. Display text varies by device."
-        override val brandNameAndroidLimit =
-            "Standard CallScreeningService does not provide callerDisplayName. A Brandname can be identified only when the device/OEM extends the callback and delivers that name to CallHS; otherwise the app has no Brandname data to match."
+                "CLI is phone-number data, not a name saved by the user in Contacts. CLI can be hidden or spoofed, so the displayed number does not guarantee the caller's true identity."
         override val specialAndroidLimit =
             "Standard Android sends only tel: handles to CallScreeningService. SIP/sips support is an OEM (Original Equipment Manufacturer) or device extension; if the URI is not delivered to CallHS, the app has no data with which to identify the SIP criterion."
         override val contactPickerTitle = "Choose contacts"
@@ -1487,7 +1529,6 @@ object EnStrings : AppStrings {
         override val callHistoryPickerPreviouslySelectedNote =
             "These numbers are not in the currently displayed history. You can still deselect them here."
         override val validationSelectSpecial = "Choose at least one call type."
-        override val validationSelectBrandName = "Choose or enter at least one Brandname."
         override val validationSelectContact = "Choose at least one contact."
         override val validationSelectCallHistory = "Choose at least one number from call history."
         override val regionPickerTitle = "Choose countries & Vietnam prefixes"
@@ -1535,9 +1576,6 @@ object EnStrings : AppStrings {
             "repeat_unanswered" -> "Legacy rule · Repeated unanswered calls"
             "spam_risk" -> typeSpamRisk
             "special" -> specialSummary(value)
-            "brand_name" -> BrandNameRuleCodec.decode(value).let { names ->
-                if (names.isEmpty()) typeBrandName else "$typeBrandName: ${names.joinToString(", ")}"
-            }
             "contacts" -> contactsSummary(value)
             "call_history" -> callHistorySummary(value)
             "geographic" -> regionSummary(value)
@@ -1651,11 +1689,13 @@ object EnStrings : AppStrings {
         override val secCategories = "Categories"
         override val secCategoriesSub = "Groups & their member numbers"
         override val secBlockRules = "Call-blocking rules"
-        override val secBlockRulesSub = "Rules, handling method, protection state and notifications"
+        override val secBlockRulesSub = "Rules, lists, schedules, protection and advanced notifications"
         override val secBlockHistory = "Blocked-call history"
         override val secBlockHistorySub = "Events blocked by CallHS"
         override val secMyNumber = "My number"
         override val secMyNumberSub = "Your phone numbers per SIM"
+        override val secOutgoingCall = "Outgoing-call settings"
+        override val secOutgoingCallSub = "Status, alert conditions and presentation style"
         override val secDisplay = "Display settings"
         override val secDisplaySub = "Theme, language, text size"
         override fun itemsCount(n: Int) = if (n == 1) "1 item" else "$n items"

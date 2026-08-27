@@ -1,19 +1,27 @@
 package com.antimobile.callhs
 
+import android.net.Uri
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.antimobile.callhs.data.backup.BackupBlockedCall
 import com.antimobile.callhs.data.backup.BackupNumberEntry
 import com.antimobile.callhs.data.backup.MergeMode
+import com.antimobile.callhs.data.local.AppDatabase
 import com.antimobile.callhs.data.blocking.CallBlockAction
 import com.antimobile.callhs.data.blocking.CallBlockDecisionTier
 import com.antimobile.callhs.data.blocking.CallBlockMethod
+import com.antimobile.callhs.data.blocking.CallBlockHistoryEntity
 import com.antimobile.callhs.data.blocking.CallBlockRepository
 import com.antimobile.callhs.data.blocking.CallBlockRuleType
 import com.antimobile.callhs.data.blocking.CallBlockScope
 import com.antimobile.callhs.data.blocking.CallBlockSettings
 import com.antimobile.callhs.data.blocking.CallerNumberVerificationStatus
+import com.antimobile.callhs.data.blocking.IncomingCallAddressParser
 import com.antimobile.callhs.data.blocking.NumberEntryOrigin
 import com.antimobile.callhs.data.blocking.SaveBlockRuleResult
+import com.antimobile.callhs.data.blocking.SpecialCallCondition
+import com.antimobile.callhs.data.blocking.SipCallerIdKind
+import com.antimobile.callhs.data.blocking.SipCallerIdentityParser
 import com.antimobile.callhs.data.blocking.SpamRiskReasonCodec
 import com.antimobile.callhs.data.blocking.SpamRiskReasonKind
 import com.antimobile.callhs.util.PhoneKey
@@ -38,9 +46,11 @@ class CallBlockArchitectureInstrumentedTest {
     @After
     fun reset() = runBlocking {
         repo.restoreBlockingData(emptyList(), emptyList(), MergeMode.REPLACE)
+        repo.restoreHistory(emptyList(), MergeMode.REPLACE)
         context.getSharedPreferences("call_block_settings", 0).edit().clear().commit()
         context.getSharedPreferences("call_block_runtime_state", 0).edit().clear().commit()
         context.getSharedPreferences("call_block_repeat_unknown_guard_attempts", 0).edit().clear().commit()
+        context.getSharedPreferences("call_block_data_migrations", 0).edit().clear().commit()
         CallBlockSettings.init(context)
         CallBlockSettings.setEnabled(context, true)
         CallBlockSettings.setBlockMethod(context, CallBlockMethod.BLOCK_AND_REJECT)
@@ -171,5 +181,248 @@ class CallBlockArchitectureInstrumentedTest {
             SpamRiskReasonKind.VERIFICATION_FAILED,
             SpamRiskReasonCodec.decode(verificationMatch.historyReasonValue)?.kind,
         )
+        val rejectedAlphaTel = IncomingCallAddressParser.parse("tel", "SERVICE123")
+        assertNull(
+            repo.findMatch(
+                number = rejectedAlphaTel.screeningAddress,
+                callerNumberVerificationStatus = CallerNumberVerificationStatus.FAILED,
+            )
+        )
+    }
+
+    @Test
+    fun sipRulesSurviveRepositorySnapshotAndRespectPrecedence() = runBlocking {
+        assertEquals(
+            SaveBlockRuleResult.SAVED,
+            repo.saveRule(
+                id = null,
+                type = CallBlockRuleType.SPECIAL,
+                rawValue = SpecialCallCondition.encode(setOf(SpecialCallCondition.SIP_PHONE_NUMBER)),
+                enabled = true,
+                action = CallBlockAction.BLOCK,
+                scope = CallBlockScope.ALL_VISIBLE_NUMBERS,
+            ),
+        )
+        assertEquals(
+            SaveBlockRuleResult.SAVED,
+            repo.saveRule(
+                id = null,
+                type = CallBlockRuleType.SPECIAL,
+                rawValue = SpecialCallCondition.encode(setOf(SpecialCallCondition.SIP_TEXT_ID)),
+                enabled = true,
+                action = CallBlockAction.BLOCK,
+                scope = CallBlockScope.ALL_VISIBLE_NUMBERS,
+            ),
+        )
+        val sipPhone = SipCallerIdentityParser.parse("sip", "+84987654321@provider.vn")
+        val sipText = SipCallerIdentityParser.parse("sips", "support@company.vn")
+
+        repo.upsertNumberEntry(CallBlockAction.ALLOW, "+84987654321")
+        assertEquals(
+            CallBlockDecisionTier.EXACT_ALLOWLIST,
+            repo.findMatch(
+                number = "+84987654321",
+                isVoip = true,
+                sipCallerIdentity = sipPhone,
+            )?.decisionTier,
+        )
+        repo.observeNumberEntries(CallBlockAction.ALLOW).first().single().let {
+            repo.deleteNumberEntry(it.id)
+        }
+
+        assertEquals(
+            SpecialCallCondition.SIP_PHONE_NUMBER,
+            repo.findMatch(
+                number = "+84987654321",
+                isVoip = true,
+                sipCallerIdentity = sipPhone,
+            )?.rule?.rawValue?.let(SpecialCallCondition::activeSelection),
+        )
+        assertEquals(
+            SpecialCallCondition.SIP_TEXT_ID,
+            repo.findMatch(
+                number = "support@company.vn",
+                isVoip = true,
+                sipCallerIdentity = sipText,
+            )?.rule?.rawValue?.let(SpecialCallCondition::activeSelection),
+        )
+    }
+
+    @Test
+    fun androidUriEncodedHandleIsDecodedExactlyOnceByClassifier() {
+        val telPhoneUri = Uri.parse("tel:%2B84912345678")
+        val sipPhoneUri = Uri.parse("sip:%2B84912345678@provider.vn")
+        val encodedLiteralUri = Uri.parse("sip:%252B84912345678@provider.vn")
+        val opaqueSipPhoneUri = Uri.fromParts("sip", "+84987654321@provider.vn", null)
+        val opaqueTelUri = Uri.fromParts("tel", "912345678;phone-context=+84", null)
+        val opaqueEncodedLiteralUri = Uri.fromParts("sip", "%2B84912345678@provider.vn", null)
+        val opaqueTextUserUri = Uri.fromParts("sip", "alice?dept@example.com", null)
+        val headerOnlyUri = Uri.parse("sip:example.com?to=alice%40example.net")
+        val opaqueHeaderOnlyUri = Uri.fromParts(
+            "sip",
+            "example.com?to=alice@example.net",
+            null,
+        )
+        val fragmentedSipUri = Uri.parse("sip:alice@example.com#x")
+        val fragmentedTelUri = Uri.parse("tel:+84912345678#")
+
+        val telPhone = IncomingCallAddressParser.parse(
+            telPhoneUri.scheme,
+            telPhoneUri.encodedSchemeSpecificPart,
+            telPhoneUri.schemeSpecificPart,
+        )
+        val sipPhone = IncomingCallAddressParser.parse(
+            sipPhoneUri.scheme,
+            sipPhoneUri.encodedSchemeSpecificPart,
+            sipPhoneUri.schemeSpecificPart,
+        )
+        val encodedLiteral = IncomingCallAddressParser.parse(
+            encodedLiteralUri.scheme,
+            encodedLiteralUri.encodedSchemeSpecificPart,
+            encodedLiteralUri.schemeSpecificPart,
+        )
+        val opaqueSipPhone = IncomingCallAddressParser.parse(
+            opaqueSipPhoneUri.scheme,
+            opaqueSipPhoneUri.encodedSchemeSpecificPart,
+            opaqueSipPhoneUri.schemeSpecificPart,
+        )
+        val opaqueTel = IncomingCallAddressParser.parse(
+            opaqueTelUri.scheme,
+            opaqueTelUri.encodedSchemeSpecificPart,
+            opaqueTelUri.schemeSpecificPart,
+        )
+        val opaqueEncodedLiteral = IncomingCallAddressParser.parse(
+            opaqueEncodedLiteralUri.scheme,
+            opaqueEncodedLiteralUri.encodedSchemeSpecificPart,
+            opaqueEncodedLiteralUri.schemeSpecificPart,
+        )
+        val opaqueTextUser = IncomingCallAddressParser.parse(
+            opaqueTextUserUri.scheme,
+            opaqueTextUserUri.encodedSchemeSpecificPart,
+            opaqueTextUserUri.schemeSpecificPart,
+        )
+        val headerOnly = IncomingCallAddressParser.parse(
+            headerOnlyUri.scheme,
+            headerOnlyUri.encodedSchemeSpecificPart,
+            headerOnlyUri.schemeSpecificPart,
+        )
+        val opaqueHeaderOnly = IncomingCallAddressParser.parse(
+            opaqueHeaderOnlyUri.scheme,
+            opaqueHeaderOnlyUri.encodedSchemeSpecificPart,
+            opaqueHeaderOnlyUri.schemeSpecificPart,
+        )
+        val fragmentedSip = IncomingCallAddressParser.parse(
+            scheme = fragmentedSipUri.scheme,
+            encodedSchemeSpecificPart = fragmentedSipUri.encodedSchemeSpecificPart,
+            decodedSchemeSpecificPart = fragmentedSipUri.schemeSpecificPart,
+            encodedFragment = fragmentedSipUri.encodedFragment,
+        )
+        val fragmentedTel = IncomingCallAddressParser.parse(
+            scheme = fragmentedTelUri.scheme,
+            encodedSchemeSpecificPart = fragmentedTelUri.encodedSchemeSpecificPart,
+            decodedSchemeSpecificPart = fragmentedTelUri.schemeSpecificPart,
+            encodedFragment = fragmentedTelUri.encodedFragment,
+        )
+
+        assertEquals("+84912345678", telPhone.telephoneNumber)
+        assertEquals("+84912345678", sipPhone.telephoneNumber)
+        assertEquals(null, encodedLiteral.telephoneNumber)
+        assertEquals("%2B84912345678", encodedLiteral.sipCallerIdentity.user)
+        assertEquals(null, opaqueSipPhone.telephoneNumber)
+        assertEquals(SipCallerIdKind.UNKNOWN, opaqueSipPhone.sipCallerIdentity.kind)
+        assertEquals(null, opaqueTel.telephoneNumber)
+        assertEquals(null, opaqueEncodedLiteral.telephoneNumber)
+        assertEquals(SipCallerIdKind.UNKNOWN, opaqueEncodedLiteral.sipCallerIdentity.kind)
+        assertEquals(SipCallerIdKind.UNKNOWN, opaqueTextUser.sipCallerIdentity.kind)
+        assertEquals(SipCallerIdKind.UNKNOWN, headerOnly.sipCallerIdentity.kind)
+        assertEquals(SipCallerIdKind.UNKNOWN, opaqueHeaderOnly.sipCallerIdentity.kind)
+        assertEquals(SipCallerIdKind.UNKNOWN, fragmentedSip.sipCallerIdentity.kind)
+        assertEquals(null, fragmentedTel.telephoneNumber)
+        assertEquals("", fragmentedTel.screeningAddress)
+    }
+
+    @Test
+    fun sipHistoryIsCanonicalAtRestoreExportAndLegacyMigrationBoundaries() = runBlocking {
+        val dao = AppDatabase.get(context).callBlockDao()
+        val secretUri = "sips:alice:secret@example.com?subject=private"
+        val safeUri = "sips:alice@example.com"
+        val reason = SpecialCallCondition.SIP_TEXT_ID.storageKey
+        val backup = BackupBlockedCall(
+            rawNumber = secretUri,
+            phoneKey = "untrusted-backup-key",
+            blockedAt = 123L,
+            ruleType = CallBlockRuleType.SPECIAL.storageKey,
+            ruleValue = reason,
+            consecutiveUnanswered = 0,
+        )
+
+        assertEquals(1, repo.restoreHistory(listOf(backup), MergeMode.REPLACE).added)
+        assertEquals(safeUri, repo.observeHistory().first().single().rawNumber)
+        val exported = repo.exportHistoryForBackup().single()
+        assertEquals(safeUri, exported.rawNumber)
+        assertTrue("secret" !in exported.rawNumber && "subject" !in exported.rawNumber)
+        assertTrue(exported.phoneKey != backup.phoneKey)
+
+        dao.deleteAllHistory()
+        context.getSharedPreferences("call_block_data_migrations", 0).edit().clear().commit()
+        val malformedLegacySecret = "sips:alice:secret@-bad.example/path?subject=private"
+        dao.insertHistory(
+            CallBlockHistoryEntity(
+                rawNumber = malformedLegacySecret,
+                phoneKey = "uri:legacy-reversible-value",
+                blockedAt = 456L,
+                ruleType = CallBlockRuleType.SPECIAL.storageKey,
+                ruleValue = reason,
+            )
+        )
+        repo.warmScreeningRuleSnapshot()
+        val migrated = dao.getHistory().single()
+        assertTrue(migrated.rawNumber.startsWith("sips:redacted-"))
+        assertTrue(migrated.rawNumber.endsWith("@invalid"))
+        assertTrue("secret" !in migrated.rawNumber && "subject" !in migrated.rawNumber)
+        assertTrue(migrated.phoneKey != "uri:legacy-reversible-value")
+
+        dao.deleteAllHistory()
+        context.getSharedPreferences("call_block_data_migrations", 0).edit().clear().commit()
+        listOf(
+            "sips:alice:first@example.com?subject=private" to "uri:legacy-one",
+            "sips:alice:second@example.com?subject=private" to "uri:legacy-two",
+        ).forEach { (raw, key) ->
+            dao.insertHistory(
+                CallBlockHistoryEntity(
+                    rawNumber = raw,
+                    phoneKey = key,
+                    blockedAt = 789L,
+                    ruleType = CallBlockRuleType.SPECIAL.storageKey,
+                    ruleValue = reason,
+                )
+            )
+        }
+        repo.warmScreeningRuleSnapshot()
+        val coalesced = dao.getHistory().single()
+        assertEquals(safeUri, coalesced.rawNumber)
+
+        dao.deleteAllHistory()
+        context.getSharedPreferences("call_block_data_migrations", 0).edit().clear().commit()
+        listOf(
+            "sips:alice:first@-bad.example/path?subject=private",
+            "sips:bob:second@-bad.example/path?subject=private",
+        ).forEachIndexed { index, raw ->
+            dao.insertHistory(
+                CallBlockHistoryEntity(
+                    rawNumber = raw,
+                    phoneKey = "uri:invalid-$index",
+                    blockedAt = 999L,
+                    ruleType = CallBlockRuleType.SPECIAL.storageKey,
+                    ruleValue = reason,
+                )
+            )
+        }
+        repo.warmScreeningRuleSnapshot()
+        val independentlyRedacted = dao.getHistory()
+        assertEquals(2, independentlyRedacted.size)
+        assertEquals(2, independentlyRedacted.map { it.phoneKey }.toSet().size)
+        assertTrue(independentlyRedacted.all { it.rawNumber.startsWith("sips:redacted-") })
+        assertTrue(independentlyRedacted.all { it.rawNumber.endsWith("@invalid") })
     }
 }

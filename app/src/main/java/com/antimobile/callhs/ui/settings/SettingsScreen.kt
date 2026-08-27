@@ -45,6 +45,7 @@ import androidx.compose.material.icons.rounded.LocalPolice
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.MailOutline
 import androidx.compose.material.icons.rounded.Phone
+import androidx.compose.material.icons.rounded.PhoneInTalk
 import androidx.compose.material.icons.rounded.PrivacyTip
 import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Repeat
@@ -127,6 +128,7 @@ fun SettingsScreen(
     onOpenLegal: (String) -> Unit,
     onOpenCategories: () -> Unit,
     onOpenCallBlocking: () -> Unit,
+    onOpenOutgoingCallSettings: () -> Unit,
     onOpenBackup: () -> Unit,
     onOpenDonate: () -> Unit
 ) {
@@ -196,6 +198,11 @@ fun SettingsScreen(
 
             SectionTitle(s.blocker.settingsSection)
             CallBlockingCard(onClick = onOpenCallBlocking)
+
+            Spacer(Modifier.height(22.dp))
+
+            SectionTitle(s.outgoingCall.settingsSection)
+            OutgoingCallSettingsCard(onClick = onOpenOutgoingCallSettings)
 
             Spacer(Modifier.height(22.dp))
 
@@ -997,6 +1004,59 @@ private fun CallBlockingCard(onClick: () -> Unit) {
                 contentDescription = s.settingsOpen,
                 tint = TextSecondary,
                 modifier = Modifier.size(22.dp)
+            )
+        }
+    }
+}
+
+/** Item độc lập mở Cài đặt cuộc gọi đi; không điều hướng vào cây màn Chặn cuộc gọi. */
+@Composable
+private fun OutgoingCallSettingsCard(onClick: () -> Unit) {
+    val s = appStrings().outgoingCall
+    PanelCard(modifier = Modifier.fillMaxWidth(), radius = 22.dp) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(horizontal = 16.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier.size(56.dp).clip(RoundedCornerShape(16.dp)).background(BrandSoft),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Rounded.PhoneInTalk,
+                    contentDescription = null,
+                    tint = Primary,
+                    modifier = Modifier.size(28.dp),
+                )
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = s.settingsTitle,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = TextPrimary,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = s.settingsSubtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.width(10.dp))
+            Icon(
+                imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                contentDescription = s.settingsOpen,
+                tint = TextSecondary,
+                modifier = Modifier.size(22.dp),
             )
         }
     }

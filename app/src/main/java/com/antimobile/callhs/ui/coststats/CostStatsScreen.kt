@@ -74,6 +74,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.antimobile.callhs.data.model.CallNumberDetail
 import com.antimobile.callhs.ui.components.AppBottomSheet
+import com.antimobile.callhs.ui.components.AppToastType
 import com.antimobile.callhs.ui.components.Avatar
 import com.antimobile.callhs.ui.components.EmptyState
 import com.antimobile.callhs.ui.components.LoadingState
@@ -787,5 +788,5 @@ private fun Context.openAppSettings() {
             Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null))
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         )
-    }.onFailure { CallActions.toast(this, appStrings().common.appSettingsOpenFailed) }
+    }.onFailure { CallActions.toast(this, appStrings().common.appSettingsOpenFailed, AppToastType.Error) }
 }

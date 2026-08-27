@@ -147,6 +147,7 @@ import com.antimobile.callhs.data.model.CallType
 import com.antimobile.callhs.i18n.LanguageSettings
 import com.antimobile.callhs.i18n.appStrings
 import com.antimobile.callhs.ui.components.AppBottomSheet
+import com.antimobile.callhs.ui.components.AppToastType
 import com.antimobile.callhs.ui.components.ContactsPermissionBanner
 import com.antimobile.callhs.ui.components.EmptyState
 import com.antimobile.callhs.ui.components.FilterOptionRow
@@ -274,7 +275,7 @@ fun CallListScreen(
                         Uri.fromParts("package", context.packageName, null)
                     ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 )
-            }.onFailure { CallActions.toast(context, appStrings().common.appSettingsOpenFailed) }
+            }.onFailure { CallActions.toast(context, appStrings().common.appSettingsOpenFailed, AppToastType.Error) }
         } else {
             contactsLauncher.launch(Manifest.permission.READ_CONTACTS)
         }
@@ -300,7 +301,7 @@ fun CallListScreen(
                         Uri.fromParts("package", context.packageName, null)
                     ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 )
-            }.onFailure { CallActions.toast(context, appStrings().common.appSettingsOpenFailed) }
+            }.onFailure { CallActions.toast(context, appStrings().common.appSettingsOpenFailed, AppToastType.Error) }
         } else {
             permLauncher.launch(Manifest.permission.READ_CALL_LOG)
         }
@@ -480,7 +481,7 @@ fun CallListScreen(
                                 .putExtra(RecognizerIntent.EXTRA_LANGUAGE, LanguageSettings.lang.tag)
                                 .putExtra(RecognizerIntent.EXTRA_PROMPT, s.callList.voicePrompt)
                         )
-                    }.onFailure { CallActions.toast(context, s.callList.voiceUnsupported) }
+                    }.onFailure { CallActions.toast(context, s.callList.voiceUnsupported, AppToastType.Warning) }
                 },
                 onScanQr = { qrFlow.scan() },
                 onContacts = onOpenContacts,

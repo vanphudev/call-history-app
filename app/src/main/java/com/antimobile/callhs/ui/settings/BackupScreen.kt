@@ -39,6 +39,7 @@ import androidx.compose.material.icons.rounded.Category
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.PhoneInTalk
 import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.Smartphone
@@ -470,6 +471,7 @@ private fun sectionMeta(section: BackupSection, s: BackupStrings): SectionMeta =
     BackupSection.BLOCK_RULES -> SectionMeta(Icons.Rounded.Block, s.secBlockRules, s.secBlockRulesSub)
     BackupSection.BLOCK_HISTORY -> SectionMeta(Icons.Rounded.History, s.secBlockHistory, s.secBlockHistorySub)
     BackupSection.MY_NUMBER -> SectionMeta(Icons.Rounded.Smartphone, s.secMyNumber, s.secMyNumberSub)
+    BackupSection.OUTGOING_CALL -> SectionMeta(Icons.Rounded.PhoneInTalk, s.secOutgoingCall, s.secOutgoingCallSub)
     BackupSection.DISPLAY -> SectionMeta(Icons.Rounded.DarkMode, s.secDisplay, s.secDisplaySub)
 }
 
@@ -478,7 +480,9 @@ private fun reportMessage(report: ImportReport, s: BackupStrings): String {
     val lines = report.sections.entries.map { (section, r) ->
         val name = sectionMeta(section, s).name
         when (section) {
-            BackupSection.DISPLAY -> "$name: ${if (r.updated > 0) s.displayApplied else s.displayKept}"
+            BackupSection.DISPLAY,
+            BackupSection.OUTGOING_CALL,
+            -> "$name: ${if (r.updated > 0) s.displayApplied else s.displayKept}"
             else -> s.resultLine(name, r.added, r.updated, r.skipped)
         }
     }

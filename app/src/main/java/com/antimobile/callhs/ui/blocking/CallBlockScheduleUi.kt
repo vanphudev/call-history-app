@@ -79,6 +79,7 @@ import com.antimobile.callhs.i18n.CallBlockStrings
 import com.antimobile.callhs.i18n.appStrings
 import com.antimobile.callhs.ui.components.AppDialog
 import com.antimobile.callhs.ui.components.AppBottomSheet
+import com.antimobile.callhs.ui.components.AppToastHost
 import com.antimobile.callhs.ui.components.DialogButton
 import com.antimobile.callhs.ui.components.PanelCard
 import com.antimobile.callhs.ui.components.Segmented
@@ -870,6 +871,7 @@ private fun CallBlockTimePickerDialog(
                         }
                     }
                 }
+                AppToastHost(modifier = Modifier.matchParentSize())
             }
         }
     }

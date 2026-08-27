@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import com.antimobile.callhs.ui.calldetail.QrScannerOverlay
 import com.antimobile.callhs.ui.calldetail.TemplateEditorScreen
 import com.antimobile.callhs.ui.components.AppBottomSheet
+import com.antimobile.callhs.ui.components.AppToastType
 import com.antimobile.callhs.ui.components.AppMessageDialog
 import com.antimobile.callhs.ui.components.DialogButton
 import com.antimobile.callhs.ui.components.PanelCard
@@ -175,7 +176,7 @@ fun MessageTemplateManagerScreen(onBack: () -> Unit) {
                 onBack = onBack,
                 onScan = {
                     if (qrTemplates.isEmpty()) {
-                        CallActions.toast(context, appStrings().templates.noQrTemplatesToast(QR_TOKEN))
+                        CallActions.toast(context, appStrings().templates.noQrTemplatesToast(QR_TOKEN), AppToastType.Warning)
                     } else {
                         scanIntent = ScanIntent.PickTemplate
                     }
@@ -212,7 +213,7 @@ fun MessageTemplateManagerScreen(onBack: () -> Unit) {
                 .padding(bottom = navBottom + 18.dp),
             onClick = {
                 if (templates.size >= MessageTemplateStore.MAX) {
-                    CallActions.toast(context, appStrings().templates.maxReached(MessageTemplateStore.MAX))
+                    CallActions.toast(context, appStrings().templates.maxReached(MessageTemplateStore.MAX), AppToastType.Warning)
                 } else {
                     editorTarget = EditorTarget.Create
                 }

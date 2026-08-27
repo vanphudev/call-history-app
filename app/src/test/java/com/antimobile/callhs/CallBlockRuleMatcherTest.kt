@@ -10,14 +10,13 @@ import com.antimobile.callhs.data.blocking.CallBlockHistoryReasonCodec
 import com.antimobile.callhs.data.blocking.CallBlockScope
 import com.antimobile.callhs.data.blocking.CallScreeningContext
 import com.antimobile.callhs.data.blocking.CallerNumberVerificationStatus
-import com.antimobile.callhs.data.blocking.BrandNamePresetCatalog
-import com.antimobile.callhs.data.blocking.BrandNameRuleCodec
 import com.antimobile.callhs.data.blocking.BlockedCallerIdentity
 import com.antimobile.callhs.data.blocking.CallHistoryRuleCodec
 import com.antimobile.callhs.data.blocking.ContactLookupStatus
 import com.antimobile.callhs.data.blocking.ContactRuleCodec
 import com.antimobile.callhs.data.blocking.GeographicBlockKind
 import com.antimobile.callhs.data.blocking.GeographicBlockOption
+import com.antimobile.callhs.data.blocking.IncomingCallAddressParser
 import com.antimobile.callhs.data.blocking.LEGACY_REPEAT_UNANSWERED_REASON_TYPE
 import com.antimobile.callhs.data.blocking.SpecialCallCondition
 import com.antimobile.callhs.data.blocking.SipCallerIdKind
@@ -434,12 +433,22 @@ class CallBlockRuleMatcherTest {
     fun sipParserSeparatesPhoneTextAndUnknownWithoutExtractingEmbeddedDigits() {
         val globalPhone = SipCallerIdentityParser.parse("sip", "+84912345678@provider.vn")
         val encodedPhone = SipCallerIdentityParser.parse("sips", "%2B84912345678@secure.vn")
+        val contextualPhone = SipCallerIdentityParser.parse(
+            "sip",
+            "1234;phone-context=%2B84@provider.vn;user=phone",
+        )
         val parameterizedPhone = SipCallerIdentityParser.parse(
             "sip",
             "+358-555-1234567;postd=pp22@foo.com;user=phone",
         )
         val text = SipCallerIdentityParser.parse("sip", "agent123@company.vn")
+        val localExtension = SipCallerIdentityParser.parse("sip", "1234@company.vn")
         val explicitText = SipCallerIdentityParser.parse("sip", "12345@company.vn;user=ip")
+        val ambiguousPhone = SipCallerIdentityParser.parse("sip", "1234@company.vn;user=phone")
+        val domainContextPhone = SipCallerIdentityParser.parse(
+            "sip",
+            "1234;phone-context=pbx.example@company.vn;user=phone",
+        )
         val invalidDeclaredPhone = SipCallerIdentityParser.parse("sip", "support@company.vn;user=phone")
         val missingUser = SipCallerIdentityParser.parse("sip", "company.vn")
         val missingHost = SipCallerIdentityParser.parse("sip", "support@")
@@ -448,15 +457,302 @@ class CallBlockRuleMatcherTest {
         assertEquals(SipCallerIdKind.PHONE_NUMBER, globalPhone.kind)
         assertEquals("+84912345678", globalPhone.phoneNumber)
         assertEquals("+84912345678", encodedPhone.phoneNumber)
+        assertEquals("+841234", contextualPhone.phoneNumber)
+        assertEquals("sip:1234;phone-context=+84@provider.vn;user=phone", contextualPhone.canonicalUri)
         assertEquals("+358-555-1234567", parameterizedPhone.phoneNumber)
         assertEquals(SipCallerIdKind.TEXT_ID, text.kind)
         assertEquals("agent123", text.user)
+        assertEquals(SipCallerIdKind.TEXT_ID, localExtension.kind)
         assertEquals(SipCallerIdKind.TEXT_ID, explicitText.kind)
+        assertEquals(SipCallerIdKind.UNKNOWN, ambiguousPhone.kind)
+        assertEquals(SipCallerIdKind.UNKNOWN, domainContextPhone.kind)
         assertEquals(SipCallerIdKind.UNKNOWN, invalidDeclaredPhone.kind)
         assertEquals(SipCallerIdKind.UNKNOWN, missingUser.kind)
         assertEquals(SipCallerIdKind.UNKNOWN, missingHost.kind)
         assertEquals(SipCallerIdKind.UNKNOWN, ordinaryCli.kind)
         assertFalse(CallHistoryRuleCodec.isSelectableNumber(text.user))
+    }
+
+    @Test
+    fun incomingAddressClassifierRejectsAlphanumericTelWithoutLeakingDigits() {
+        val alphabetic = IncomingCallAddressParser.parse("TEL", "SUPPORT")
+        val mixed = IncomingCallAddressParser.parse("tel", "SERVICE123")
+        val number = IncomingCallAddressParser.parse("tel", "%2B84912345678;ext=99")
+        val unsupported = IncomingCallAddressParser.parse("mailto", "support@example.com")
+        val digitsRule = rule(CallBlockRuleType.CONTAINS, "123", id = 2L)
+
+        assertEquals(null, alphabetic.telephoneNumber)
+        assertEquals("", alphabetic.screeningAddress)
+        assertEquals("SUPPORT", alphabetic.historyIdentity)
+        assertEquals(null, BlockedCallerIdentity.key(alphabetic.historyIdentity))
+        assertEquals(null, mixed.telephoneNumber)
+        assertEquals("", mixed.screeningAddress)
+        assertFalse(
+            CallBlockRuleMatcher.matches(
+                digitsRule,
+                CallScreeningContext(mixed.screeningAddress),
+            )
+        )
+        assertEquals(
+            null,
+            CallBlockRuleMatcher.spamRiskReason(
+                CallScreeningContext(
+                    number = mixed.screeningAddress,
+                    callerNumberVerificationStatus = CallerNumberVerificationStatus.FAILED,
+                )
+            ),
+        )
+        assertEquals("+84912345678", number.telephoneNumber)
+        assertEquals("+84912345678", number.historyIdentity)
+        assertEquals(null, unsupported.telephoneNumber)
+        assertEquals("", unsupported.screeningAddress)
+        assertTrue(unsupported.isNonTelHandle)
+    }
+
+    @Test
+    fun telClassifierRemovesRfc3966ParametersAndAppliesGlobalPhoneContext() {
+        val global = IncomingCallAddressParser.parse("tel", "+84912345678;ext=123")
+        val withIsdnSubaddress = IncomingCallAddressParser.parse("tel", "+84912345678;isub=45")
+        val local = IncomingCallAddressParser.parse("tel", "912345678;phone-context=%2B84")
+        val domainContext = IncomingCallAddressParser.parse("tel", "912345678;phone-context=pbx.example")
+        val malformed = IncomingCallAddressParser.parse("tel", "0912345678;ext")
+        val conflictingSubaddresses = IncomingCallAddressParser.parse(
+            "tel",
+            "+84912345678;ext=123;isub=45",
+        )
+        val unknownMandatory = IncomingCallAddressParser.parse("tel", "+84912345678;m-auth=secret")
+        val invalidExtension = IncomingCallAddressParser.parse("tel", "+84912345678;ext=abc")
+        val malformedParameterName = IncomingCallAddressParser.parse("tel", "+84912345678; ext=99")
+        val malformedParameterValue = IncomingCallAddressParser.parse("tel", "+84912345678;ext=99%20")
+        val malformedOptionalValue = IncomingCallAddressParser.parse("tel", "+84912345678;foo=<bad>")
+        val escapedWhitespace = IncomingCallAddressParser.parse("tel", "%20%2B84912345678")
+        val unicodeDigits = IncomingCallAddressParser.parse("tel", "%D9%A1%D9%A2%D9%A3")
+        val withFragment = IncomingCallAddressParser.parse(
+            scheme = "tel",
+            encodedSchemeSpecificPart = "+84912345678",
+            encodedFragment = "x",
+        )
+        val withEmptyFragment = IncomingCallAddressParser.parse(
+            scheme = "tel",
+            encodedSchemeSpecificPart = "+84912345678",
+            encodedFragment = "",
+        )
+        val globalWithContext = IncomingCallAddressParser.parse(
+            "tel",
+            "+84912345678;phone-context=+84",
+        )
+
+        assertEquals("+84912345678", global.telephoneNumber)
+        assertEquals("+84912345678", withIsdnSubaddress.telephoneNumber)
+        assertEquals("+84912345678", local.telephoneNumber)
+        assertEquals(null, domainContext.telephoneNumber)
+        assertEquals(null, malformed.telephoneNumber)
+        assertEquals(null, conflictingSubaddresses.telephoneNumber)
+        assertEquals(null, unknownMandatory.telephoneNumber)
+        assertEquals(null, invalidExtension.telephoneNumber)
+        assertEquals(null, malformedParameterName.telephoneNumber)
+        assertEquals(null, malformedParameterValue.telephoneNumber)
+        assertEquals(null, malformedOptionalValue.telephoneNumber)
+        assertEquals(null, escapedWhitespace.telephoneNumber)
+        assertEquals(null, unicodeDigits.telephoneNumber)
+        assertEquals(null, withFragment.telephoneNumber)
+        assertEquals("", withFragment.screeningAddress)
+        assertEquals(null, withEmptyFragment.telephoneNumber)
+        assertFalse(
+            CallBlockRuleMatcher.matches(
+                rule(CallBlockRuleType.EXACT_NUMBER, "+84912345678"),
+                CallScreeningContext(withFragment.screeningAddress),
+            )
+        )
+        assertEquals(null, globalWithContext.telephoneNumber)
+        assertEquals(null, IncomingCallAddressParser.parse(null, "0912345678").telephoneNumber)
+        assertEquals(null, IncomingCallAddressParser.parse("tel", "//0912345678").telephoneNumber)
+    }
+
+    @Test
+    fun incomingClassifierHandlesOpaqueAndroidUriWithoutDoubleDecoding() {
+        val sipPhone = IncomingCallAddressParser.parse(
+            scheme = "sip",
+            encodedSchemeSpecificPart = "%2B84912345678%40provider.vn",
+            decodedSchemeSpecificPart = "+84912345678@provider.vn",
+        )
+        val telPhone = IncomingCallAddressParser.parse(
+            scheme = "tel",
+            encodedSchemeSpecificPart = "912345678%3Bphone-context%3D%2B84",
+            decodedSchemeSpecificPart = "912345678;phone-context=+84",
+        )
+        val encodedLiteral = IncomingCallAddressParser.parse(
+            scheme = "sip",
+            encodedSchemeSpecificPart = "%252B84912345678%40provider.vn",
+            decodedSchemeSpecificPart = "%2B84912345678@provider.vn",
+        )
+        val opaqueHostOnlyWithHeader = IncomingCallAddressParser.parse(
+            scheme = "sip",
+            encodedSchemeSpecificPart = "example.com%3Fto%3Dalice%40example.net",
+            decodedSchemeSpecificPart = "example.com?to=alice@example.net",
+        )
+
+        assertEquals(null, sipPhone.telephoneNumber)
+        assertEquals(SipCallerIdKind.UNKNOWN, sipPhone.sipCallerIdentity.kind)
+        assertEquals(null, telPhone.telephoneNumber)
+        assertEquals(null, encodedLiteral.telephoneNumber)
+        assertEquals(SipCallerIdKind.UNKNOWN, encodedLiteral.sipCallerIdentity.kind)
+        assertEquals(SipCallerIdKind.UNKNOWN, opaqueHostOnlyWithHeader.sipCallerIdentity.kind)
+    }
+
+    @Test
+    fun sipParserRejectsMalformedEscapesHostsAndPortsButKeepsSafeCanonicalIdentity() {
+        val withPassword = SipCallerIdentityParser.parse(
+            "SIPS",
+            "alice:secret@example.com:5061;transport=tcp",
+        )
+        val withHeader = SipCallerIdentityParser.parse(
+            "SIPS",
+            "alice:secret@example.com:5061;transport=tcp?subject=hi@example.net",
+        )
+        val explicitText = SipCallerIdentityParser.parse("sip", "12345@example.com;user=ip")
+        val ipv6 = SipCallerIdentityParser.parse("sips", "alice@[2001:db8::1]:5061")
+        val mappedIpv6 = SipCallerIdentityParser.parse("sip", "alice@[::ffff:192.0.2.1]")
+        val doubleEncoded = SipCallerIdentityParser.parse("sip", "%252B84912345678@example.com")
+        val semicolonText = SipCallerIdentityParser.parse("sip", "alice;dept@example.com")
+        val questionText = SipCallerIdentityParser.parse("sip", "alice?dept@example.com")
+        val hostOnlyWithHeader = SipCallerIdentityParser.parse(
+            scheme = "sip",
+            encodedSchemeSpecificPart = "example.com?to=alice%40example.net",
+            decodedSchemeSpecificPart = "example.com?to=alice@example.net",
+        )
+
+        assertEquals(SipCallerIdKind.TEXT_ID, withPassword.kind)
+        assertEquals("sips:alice@example.com:5061", withPassword.canonicalUri)
+        assertFalse(withPassword.canonicalUri.orEmpty().contains("secret"))
+        assertEquals(SipCallerIdKind.UNKNOWN, withHeader.kind)
+        assertEquals(SipCallerIdKind.TEXT_ID, explicitText.kind)
+        assertEquals("sip:12345@example.com;user=ip", explicitText.canonicalUri)
+        assertEquals(SipCallerIdKind.TEXT_ID, ipv6.kind)
+        assertEquals("sips:alice@[2001:db8::1]:5061", ipv6.canonicalUri)
+        assertEquals(SipCallerIdKind.TEXT_ID, mappedIpv6.kind)
+        assertEquals("sip:alice@[::ffff:c000:201]", mappedIpv6.canonicalUri)
+        assertEquals(SipCallerIdKind.TEXT_ID, doubleEncoded.kind)
+        assertEquals("%2B84912345678", doubleEncoded.user)
+        assertEquals(SipCallerIdKind.TEXT_ID, semicolonText.kind)
+        assertEquals("alice;dept", semicolonText.user)
+        assertEquals("sip:alice%3Bdept@example.com", semicolonText.canonicalUri)
+        assertEquals(SipCallerIdKind.TEXT_ID, questionText.kind)
+        assertEquals("alice?dept", questionText.user)
+        assertEquals("sip:alice%3Fdept@example.com", questionText.canonicalUri)
+        assertEquals(SipCallerIdKind.UNKNOWN, hostOnlyWithHeader.kind)
+        assertFalse(
+            BlockedCallerIdentity.key("sip:alice@example.com") ==
+                BlockedCallerIdentity.key("sip:alice;dept@example.com")
+        )
+        assertEquals(
+            SipCallerIdKind.UNKNOWN,
+            SipCallerIdentityParser.parse("sip", "%ZZ@example.com").kind,
+        )
+        assertEquals(
+            SipCallerIdKind.UNKNOWN,
+            SipCallerIdentityParser.parse("sip", "alice@example.com/path").kind,
+        )
+        assertEquals(
+            SipCallerIdKind.UNKNOWN,
+            SipCallerIdentityParser.parse("sip", "alice@example.com:not-a-port").kind,
+        )
+        assertEquals(
+            SipCallerIdKind.UNKNOWN,
+            SipCallerIdentityParser.parse("sip", "alice@[2001:db8::1").kind,
+        )
+        assertEquals(
+            SipCallerIdKind.UNKNOWN,
+            SipCallerIdentityParser.parse("sip", "alice@example.com;transport=bad value").kind,
+        )
+        assertEquals(
+            SipCallerIdKind.UNKNOWN,
+            SipCallerIdentityParser.parse("sip", "alice@example.com;user=garbage").kind,
+        )
+        assertEquals(
+            SipCallerIdKind.UNKNOWN,
+            SipCallerIdentityParser.parse("sip", "alice@-bad.example").kind,
+        )
+        assertEquals(
+            SipCallerIdKind.UNKNOWN,
+            SipCallerIdentityParser.parse("sip", "alice@١٢٧.٠.٠.١").kind,
+        )
+        assertEquals(
+            SipCallerIdKind.UNKNOWN,
+            SipCallerIdentityParser.parse("sip", "alice@127.000.0.1").kind,
+        )
+        assertEquals(
+            SipCallerIdKind.UNKNOWN,
+            SipCallerIdentityParser.parse("sip", "alice@example.com:٥٠٦٠").kind,
+        )
+        assertEquals(
+            SipCallerIdKind.UNKNOWN,
+            SipCallerIdentityParser.parse("sip", "alice@[::::]").kind,
+        )
+        assertEquals(
+            SipCallerIdKind.UNKNOWN,
+            SipCallerIdentityParser.parse("sip", "alice@[dead:beef]").kind,
+        )
+        assertEquals(
+            SipCallerIdKind.UNKNOWN,
+            SipCallerIdentityParser.parse("sip", "alice@[192.0.2.1::]").kind,
+        )
+        assertEquals(
+            SipCallerIdKind.UNKNOWN,
+            SipCallerIdentityParser.parse("sip", "alice@[192.0.2.1::1]").kind,
+        )
+        assertEquals(
+            SipCallerIdKind.UNKNOWN,
+            SipCallerIdentityParser.parse("sip", "alice@[::ffff:192.168.001.1]").kind,
+        )
+        assertEquals(
+            SipCallerIdKind.UNKNOWN,
+            SipCallerIdentityParser.parse("sip", "alice@[attacker.example]").kind,
+        )
+        assertEquals(
+            SipCallerIdKind.UNKNOWN,
+            SipCallerIdentityParser.parse("sip", "alice\\evil@example.com").kind,
+        )
+        assertEquals(
+            SipCallerIdKind.UNKNOWN,
+            SipCallerIdentityParser.parse("sip", "alice[dept]@example.com").kind,
+        )
+        assertEquals(
+            SipCallerIdKind.UNKNOWN,
+            SipCallerIdentityParser.parse("sip", "<alice>@example.com").kind,
+        )
+        assertEquals(
+            SipCallerIdKind.UNKNOWN,
+            SipCallerIdentityParser.parse("sip", "alice:bad\\password@example.com").kind,
+        )
+        assertEquals(
+            SipCallerIdKind.UNKNOWN,
+            SipCallerIdentityParser.parse("sip", "//alice@example.com").kind,
+        )
+        assertEquals(
+            SipCallerIdKind.UNKNOWN,
+            SipCallerIdentityParser.parse(
+                "sip",
+                "alice%40example.com",
+                "alice@example.com",
+            ).kind,
+        )
+        assertEquals(
+            SipCallerIdKind.UNKNOWN,
+            SipCallerIdentityParser.parse("sip", "alice@example.com?garbage").kind,
+        )
+        assertEquals(
+            SipCallerIdKind.UNKNOWN,
+            SipCallerIdentityParser.parse("sip", "%20%2B84912345678%20@example.com").kind,
+        )
+        assertEquals(
+            SipCallerIdKind.UNKNOWN,
+            SipCallerIdentityParser.parse("sip", "+84%20912@example.com;user=phone").kind,
+        )
+        assertEquals(
+            SipCallerIdKind.UNKNOWN,
+            SipCallerIdentityParser.parse("sip", " alice@example.com ").kind,
+        )
     }
 
     @Test
@@ -479,53 +775,37 @@ class CallBlockRuleMatcherTest {
             )
         )
         assertTrue(BlockedCallerIdentity.key("sip:agent123@company.vn")?.startsWith("uri:") == true)
+        assertEquals(
+            BlockedCallerIdentity.key("sip:alice@example.com"),
+            BlockedCallerIdentity.key("SIP:alice:secret@EXAMPLE.COM?subject=private"),
+        )
+        assertEquals(
+            "sip:alice@example.com",
+            BlockedCallerIdentity.canonicalize(
+                "SIP:alice:secret@EXAMPLE.COM?subject=private"
+            )?.historyIdentity,
+        )
+        assertEquals(
+            BlockedCallerIdentity.key("sip:alice@[2001:0db8:0:0:0:0:0:1]"),
+            BlockedCallerIdentity.key("sip:alice@[2001:db8::1]"),
+        )
+        val malformedLegacy = "sips:alice:secret@-bad.example/path?subject=private"
+        assertEquals(null, BlockedCallerIdentity.canonicalize(malformedLegacy))
+        val redacted = BlockedCallerIdentity.redactLegacySip(
+            malformedLegacy,
+            opaqueToken = "42",
+        )
+        assertEquals("sips:redacted-42@invalid", redacted?.historyIdentity)
+        assertFalse(redacted?.historyIdentity.orEmpty().contains("secret"))
         assertEquals(PhoneKey.of("+84912345678"), BlockedCallerIdentity.key("+84912345678"))
     }
 
     @Test
-    fun brandNameRuleRoundTripsAndMatchesExactCaseOnly() {
-        val names = listOf("Vietcombank", "VIETCOMBANK", "MoMo")
-        val raw = BrandNameRuleCodec.encode(names)
-        val rule = rule(CallBlockRuleType.BRAND_NAME, raw)
-
-        assertEquals(names.sorted(), BrandNameRuleCodec.decode(raw))
-        assertTrue(CallBlockRuleMatcher.isValid(CallBlockRuleType.BRAND_NAME, raw))
-        assertTrue(
-            CallBlockRuleMatcher.matches(
-                rule,
-                CallScreeningContext(number = "1900", callerDisplayName = "Vietcombank"),
-            )
-        )
-        assertFalse(
-            CallBlockRuleMatcher.matches(
-                rule,
-                CallScreeningContext(number = "1900", callerDisplayName = "vietcombank"),
-            )
-        )
-        assertFalse(CallBlockRuleMatcher.matches(rule, CallScreeningContext(number = "1900")))
-    }
-
-    @Test
-    fun brandNameRuleRejectsMissingNameAndMoreThanFiveNames() {
-        val noNames = BrandNameRuleCodec.encode(emptyList())
-        val sixNames = BrandNameRuleCodec.encode((1..6).map { "Brand$it" })
-
-        assertFalse(CallBlockRuleMatcher.isValid(CallBlockRuleType.BRAND_NAME, noNames))
-        assertFalse(CallBlockRuleMatcher.isValid(CallBlockRuleType.BRAND_NAME, sixNames))
-    }
-
-    @Test
-    fun sipPhoneHonorsContactScopeWhileBrandNameIsIndependentFromContacts() {
+    fun sipPhoneHonorsContactScope() {
         val special = rule(
             CallBlockRuleType.SPECIAL,
             SpecialCallCondition.encode(setOf(SpecialCallCondition.SIP_PHONE_NUMBER)),
         ).copy(scope = CallBlockScope.NOT_SAVED)
-        val brand = rule(
-            CallBlockRuleType.BRAND_NAME,
-            BrandNameRuleCodec.encode(listOf("MoMo")),
-            id = 2L,
-        )
-        val invalidScopedBrand = brand.copy(scope = CallBlockScope.SAVED_CONTACT)
 
         assertTrue(
             CallBlockRuleMatcher.matches(
@@ -549,34 +829,6 @@ class CallBlockRuleMatcherTest {
                 ),
             )
         )
-        assertTrue(
-            CallBlockRuleMatcher.matches(
-                brand,
-                CallScreeningContext("0912345678", ContactLookupStatus.IN_CONTACTS, callerDisplayName = "MoMo"),
-            )
-        )
-        assertTrue(
-            CallBlockRuleMatcher.matches(
-                brand,
-                CallScreeningContext("0912345678", ContactLookupStatus.NOT_IN_CONTACTS, callerDisplayName = "MoMo"),
-            )
-        )
-        assertFalse(
-            CallBlockRuleMatcher.matches(
-                invalidScopedBrand,
-                CallScreeningContext("0912345678", ContactLookupStatus.IN_CONTACTS, callerDisplayName = "MoMo"),
-            )
-        )
-    }
-
-    @Test
-    fun brandNamePresetGroupsHaveAtMostFiveValidNames() {
-        assertTrue(BrandNamePresetCatalog.groups.isNotEmpty())
-        BrandNamePresetCatalog.groups.forEach { group ->
-            assertTrue(group.names.size <= BrandNameRuleCodec.MAX_NAMES)
-            assertEquals(group.names.size, group.names.distinct().size)
-            assertTrue(group.names.all(BrandNameRuleCodec::isAllowedName))
-        }
     }
 
     @Test
@@ -779,7 +1031,7 @@ class CallBlockRuleMatcherTest {
     }
 
     @Test
-    fun hiddenSipTextAndBrandNameDisableContactScopeWhileSipPhoneKeepsIt() {
+    fun privateAndSipTextDisableContactScopeWhileSipPhoneKeepsIt() {
         val privateRaw = SpecialCallCondition.encode(setOf(SpecialCallCondition.PRIVATE_NUMBER))
         val sipPhoneRaw = SpecialCallCondition.encode(setOf(SpecialCallCondition.SIP_PHONE_NUMBER))
         val sipTextRaw = SpecialCallCondition.encode(setOf(SpecialCallCondition.SIP_TEXT_ID))
@@ -791,9 +1043,6 @@ class CallBlockRuleMatcherTest {
         assertTrue(CallBlockRuleType.SPECIAL.supportsScope(CallBlockScope.SAVED_CONTACT, sipPhoneRaw))
         assertFalse(CallBlockRuleType.SPECIAL.supportsScope(CallBlockScope.NOT_SAVED, sipTextRaw))
         assertFalse(CallBlockRuleType.SPECIAL.supportsScope(CallBlockScope.SAVED_CONTACT, sipTextRaw))
-        assertTrue(CallBlockRuleType.BRAND_NAME.supportsScope(CallBlockScope.ALL_VISIBLE_NUMBERS))
-        assertFalse(CallBlockRuleType.BRAND_NAME.supportsScope(CallBlockScope.NOT_SAVED))
-        assertFalse(CallBlockRuleType.BRAND_NAME.supportsScope(CallBlockScope.SAVED_CONTACT))
     }
 
     private fun rule(type: CallBlockRuleType, raw: String, id: Long = 1L): CallBlockRule =

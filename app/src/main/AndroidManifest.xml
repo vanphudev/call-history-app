@@ -30,6 +30,9 @@
     <!-- Notification riêng sau khi CallScreeningService đã chặn cuộc gọi (Android 13+ xin runtime). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Tuỳ chọn popup AppDialog-style cho cảnh báo cuộc gọi đi; người dùng phải tự cấp special access. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
     <queries>
         <package android:name="com.zing.zalo" />
         <package android:name="com.android.chrome" />
@@ -69,6 +72,16 @@
             android:permission="android.permission.BIND_SCREENING_SERVICE">
             <intent-filter>
                 <action android:name="android.telecom.CallScreeningService" />
+            </intent-filter>
+        </service>
+
+        <!-- Callback chuyên biệt trước cuộc gọi đi; CallHS luôn gọi placeCallUnmodified(). -->
+        <service
+            android:name=".data.outgoing.OutgoingCallRedirectionService"
+            android:exported="true"
+            android:permission="android.permission.BIND_CALL_REDIRECTION_SERVICE">
+            <intent-filter>
+                <action android:name="android.telecom.CallRedirectionService" />
             </intent-filter>
         </service>
 

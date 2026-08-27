@@ -74,6 +74,7 @@ import com.antimobile.callhs.ui.theme.Primary
 import com.antimobile.callhs.ui.theme.TextPrimary
 import com.antimobile.callhs.ui.theme.TextSecondary
 import com.antimobile.callhs.i18n.appStrings
+import com.antimobile.callhs.ui.components.AppToastType
 import com.antimobile.callhs.util.CallActions
 import com.antimobile.callhs.util.Carrier
 import com.antimobile.callhs.util.MyNumberStore
@@ -146,7 +147,7 @@ fun MyNumberScreen(onBack: () -> Unit) {
             val digits = inputs[slot.slotIndex]?.text?.filter { it.isDigit() }.orEmpty()
             MyNumberStore.set(context, slot.slotIndex, digits)
         }
-        if (hasEditable) CallActions.toast(context, s.myNumber.saved)
+        if (hasEditable) CallActions.toast(context, s.myNumber.saved, AppToastType.Success)
         onBack()
     }
 

@@ -7,8 +7,10 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import android.widget.Toast
 import com.antimobile.callhs.i18n.appStrings
+import com.antimobile.callhs.ui.components.AppToast
+import com.antimobile.callhs.ui.components.AppToastDuration
+import com.antimobile.callhs.ui.components.AppToastType
 
 /**
  * Các hành động phụ trợ — chỉ MỞ app hệ thống qua Intent (không tự gọi, không cần quyền CALL_PHONE),
@@ -19,14 +21,14 @@ object CallActions {
     fun dial(context: Context, number: String) {
         runCatching {
             context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + Uri.encode(number))))
-        }.onFailure { toast(context, appStrings().common.dialerOpenFailed) }
+        }.onFailure { toast(context, appStrings().common.dialerOpenFailed, AppToastType.Error) }
     }
 
     /** Mở bàn phím quay số hệ thống (không kèm số) — dùng cho nút FAB. */
     fun openDialer(context: Context) {
         runCatching {
             context.startActivity(Intent(Intent.ACTION_DIAL))
-        }.onFailure { toast(context, appStrings().common.dialerOpenFailed) }
+        }.onFailure { toast(context, appStrings().common.dialerOpenFailed, AppToastType.Error) }
     }
 
     /** Các nút cho tính năng chưa xây dựng — báo cho người dùng biết sẽ sớm có. */
@@ -37,7 +39,7 @@ object CallActions {
     fun message(context: Context, number: String) {
         runCatching {
             context.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:" + Uri.encode(number))))
-        }.onFailure { toast(context, appStrings().common.messagingOpenFailed) }
+        }.onFailure { toast(context, appStrings().common.messagingOpenFailed, AppToastType.Error) }
     }
 
     /**
@@ -49,7 +51,7 @@ object CallActions {
             val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:" + Uri.encode(number)))
             intent.putExtra("sms_body", smsBody(context, body))
             context.startActivity(intent)
-        }.onFailure { toast(context, appStrings().common.messagingOpenFailed) }
+        }.onFailure { toast(context, appStrings().common.messagingOpenFailed, AppToastType.Error) }
     }
 
     /**
@@ -70,20 +72,20 @@ object CallActions {
             val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:"))
             intent.putExtra("sms_body", smsBody(context, body))
             context.startActivity(intent)
-        }.onFailure { toast(context, appStrings().common.messagingOpenFailed) }
+        }.onFailure { toast(context, appStrings().common.messagingOpenFailed, AppToastType.Error) }
     }
 
     fun copy(context: Context, number: String) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
         clipboard?.setPrimaryClip(ClipData.newPlainText(appStrings().common.phoneNumberLabel, number))
-        toast(context, appStrings().common.numberCopied)
+        toast(context, appStrings().common.numberCopied, AppToastType.Success)
     }
 
     /** Sao chép NỘI DUNG bất kỳ (vd văn bản/QR đã quét) vào clipboard, kèm toast trung tính. */
     fun copyContent(context: Context, text: String) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
         clipboard?.setPrimaryClip(ClipData.newPlainText(appStrings().common.contentLabel, text))
-        toast(context, appStrings().common.contentCopied)
+        toast(context, appStrings().common.contentCopied, AppToastType.Success)
     }
 
     /**
@@ -96,7 +98,7 @@ object CallActions {
             if (!subject.isNullOrEmpty()) intent.putExtra(Intent.EXTRA_SUBJECT, subject)
             if (!body.isNullOrEmpty()) intent.putExtra(Intent.EXTRA_TEXT, body)
             context.startActivity(intent)
-        }.onFailure { toast(context, appStrings().common.emailOpenFailed) }
+        }.onFailure { toast(context, appStrings().common.emailOpenFailed, AppToastType.Error) }
     }
 
     fun share(context: Context, number: String) {
@@ -115,7 +117,7 @@ object CallActions {
             else
                 Intent(Settings.ACTION_WIFI_SETTINGS)
             context.startActivity(intent)
-        }.onFailure { toast(context, appStrings().common.wifiSettingsOpenFailed) }
+        }.onFailure { toast(context, appStrings().common.wifiSettingsOpenFailed, AppToastType.Error) }
     }
 
     /**
@@ -130,10 +132,17 @@ object CallActions {
                 else -> "geo:$lat,$lng?q=$lat,$lng"
             }
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(uri)))
-        }.onFailure { toast(context, appStrings().common.mapsOpenFailed) }
+        }.onFailure { toast(context, appStrings().common.mapsOpenFailed, AppToastType.Error) }
     }
 
-    fun toast(context: Context, message: String) {
-        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-    }
+    /**
+     * Cầu nối tương thích cho các lời gọi cũ. [context] được giữ trong chữ ký để không phải sửa hàng loạt
+     * call-site; phần hiển thị thực tế đi qua [AppToast] và không còn phụ thuộc Android Toast.
+     */
+    fun toast(
+        @Suppress("UNUSED_PARAMETER") context: Context,
+        message: String,
+        type: AppToastType = AppToastType.Info,
+        duration: AppToastDuration = AppToastDuration.Short
+    ) = AppToast.show(message, type, duration)
 }

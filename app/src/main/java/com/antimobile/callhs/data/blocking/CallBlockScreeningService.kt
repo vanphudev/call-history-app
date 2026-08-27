@@ -3,13 +3,14 @@ package com.antimobile.callhs.data.blocking
 import android.telecom.Call
 import android.telecom.CallScreeningService
 import android.telecom.Connection
-import android.telecom.PhoneAccount
 import android.telecom.TelecomManager
 import android.os.Build
 import android.os.SystemClock
 import android.util.Log
+import com.antimobile.callhs.data.outgoing.OutgoingCallAlertDispatcher
+import com.antimobile.callhs.data.outgoing.OutgoingCallEventSource
+import com.antimobile.callhs.data.outgoing.OutgoingCallRole
 import com.antimobile.callhs.i18n.LanguageSettings
-import com.antimobile.callhs.util.PhoneKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -40,12 +41,21 @@ class CallBlockScreeningService : CallScreeningService() {
     }
 
     override fun onScreenCall(callDetails: Call.Details) {
-        // Service được gọi cho cả outgoing; chỉ incoming mới có thể disallow.
-        if (callDetails.callDirection != Call.Details.DIRECTION_INCOMING) {
-            runCatching { allow(callDetails) }
-                .onFailure { error -> Log.e(LOG_TAG, "Unable to invoke outgoing-call response", error) }
+        // Call.Details của screening không cam kết accountHandle. Chỉ dùng làm fallback cho người
+        // dùng cũ chưa cấp ROLE_CALL_REDIRECTION; response outgoing vốn bị Android bỏ qua.
+        if (callDetails.callDirection == Call.Details.DIRECTION_OUTGOING) {
+            if (!OutgoingCallRole.isHeld(applicationContext)) {
+                OutgoingCallAlertDispatcher.onOutgoingCall(
+                    context = applicationContext,
+                    handle = callDetails.handle,
+                    phoneAccount = null,
+                    createdAtMillis = callDetails.creationTimeMillis,
+                    source = OutgoingCallEventSource.SCREENING_FALLBACK,
+                )
+            }
             return
         }
+        if (callDetails.callDirection != Call.Details.DIRECTION_INCOMING) return
 
         val startedAt = SystemClock.elapsedRealtime()
         val appContext = applicationContext
@@ -89,34 +99,28 @@ class CallBlockScreeningService : CallScreeningService() {
             }
 
             val handle = callDetails.handle
-            val number = handle?.schemeSpecificPart.orEmpty()
+            // Only encoded-form literal delimiters are trusted; decoded opaque structure is
+            // ambiguous and fails open.
+            val address = IncomingCallAddressParser.parse(
+                scheme = handle?.scheme,
+                encodedSchemeSpecificPart = handle?.encodedSchemeSpecificPart,
+                decodedSchemeSpecificPart = handle?.schemeSpecificPart,
+                encodedFragment = handle?.encodedFragment,
+            )
+            val number = address.screeningAddress
             // AOSP normally omits hidden/non-tel calls from this service. These flags are best-effort for
             // OEMs that still deliver them; the standard Android path must not be advertised as support.
             val isPrivateNumber =
-                callDetails.handlePresentation != TelecomManager.PRESENTATION_ALLOWED || number.isBlank()
-            val isVoip = handle?.scheme != null && handle.scheme != PhoneAccount.SCHEME_TEL
-            val sipCallerIdentity = SipCallerIdentityParser.parse(
-                scheme = handle?.scheme,
-                schemeSpecificPart = handle?.schemeSpecificPart,
-            )
-            val historyIdentity = when (sipCallerIdentity.kind) {
-                SipCallerIdKind.PHONE_NUMBER -> sipCallerIdentity.phoneNumber.orEmpty()
-                SipCallerIdKind.TEXT_ID -> handle?.toString().orEmpty()
-                SipCallerIdKind.UNKNOWN -> number
-            }
-            // This ConnectionService caller-ID value is distinct from the user's Contacts name.
-            // Standard CallScreeningService does not include it in the guaranteed Details fields;
-            // keep OEM support best-effort and fail open when the extension supplies no value.
-            val callerDisplayName = callDetails.callerDisplayName?.trim()?.takeIf(String::isNotEmpty)
+                callDetails.handlePresentation != TelecomManager.PRESENTATION_ALLOWED ||
+                    address.rawAddress.isBlank()
 
             val lookup = try {
                 val repository = CallBlockRepository(appContext)
                 repository to repository.findMatch(
                     number = number,
                     isPrivateNumber = isPrivateNumber,
-                    isVoip = isVoip,
-                    callerDisplayName = callerDisplayName,
-                    sipCallerIdentity = sipCallerIdentity,
+                    isVoip = address.isNonTelHandle,
+                    sipCallerIdentity = address.sipCallerIdentity,
                     callCreatedAt = callCreatedAt,
                     callerNumberVerificationStatus = callerNumberVerificationStatus(callDetails),
                 )
@@ -199,8 +203,8 @@ class CallBlockScreeningService : CallScreeningService() {
             // Post the Android-owned heads-up immediately after Telecom has the blocking response.
             // Waiting for a Room transaction first used to create a race where process reclaim lost
             // the alert entirely. The durable history result below updates this same ID silently.
-            val notificationEventId = notificationEventId(historyIdentity, callCreatedAt)
-            val immediateNotification = repo.previewBlockedCall(historyIdentity, match, notificationEventId)
+            val notificationEventId = notificationEventId(address.historyIdentity, callCreatedAt)
+            val immediateNotification = repo.previewBlockedCall(address.historyIdentity, match, notificationEventId)
                 ?.let { preview ->
                     runCatching {
                         CallBlockNotifier.notifyBlocked(
@@ -223,7 +227,7 @@ class CallBlockScreeningService : CallScreeningService() {
                 runCatching { LanguageSettings.init(appContext) }
                     .onFailure { error -> Log.e(LOG_TAG, "Unable to load notification language", error) }
                 val result = runCatching {
-                    repo.recordBlockedCall(historyIdentity, match, blockedAt = callCreatedAt)
+                    repo.recordBlockedCall(address.historyIdentity, match, blockedAt = callCreatedAt)
                 }
                     .onFailure { error -> Log.e(LOG_TAG, "Unable to record blocked call", error) }
                     .getOrNull()
@@ -265,10 +269,12 @@ class CallBlockScreeningService : CallScreeningService() {
         respondToCall(callDetails, CallResponse.Builder().build())
     }
 
-    private fun notificationEventId(number: String, callCreatedAt: Long): Long {
+    private fun notificationEventId(rawIdentity: String, callCreatedAt: Long): Long {
         val eventTime = callCreatedAt.takeIf { it > 0L } ?: System.currentTimeMillis()
-        val numberBits = PhoneKey.of(number).hashCode().toLong() shl Int.SIZE_BITS
-        return (eventTime xor numberBits).takeIf { it != 0L } ?: eventTime.coerceAtLeast(1L)
+        val identityBits = (BlockedCallerIdentity.key(rawIdentity) ?: rawIdentity.trim())
+            .hashCode()
+            .toLong() shl Int.SIZE_BITS
+        return (eventTime xor identityBits).takeIf { it != 0L } ?: eventTime.coerceAtLeast(1L)
     }
 
     /** API 29 has no verification verdict. NOT_VERIFIED is deliberately distinct from FAILED. */

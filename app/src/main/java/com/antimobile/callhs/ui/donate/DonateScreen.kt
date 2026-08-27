@@ -124,6 +124,7 @@ import com.antimobile.callhs.data.donate.BankApp
 import com.antimobile.callhs.i18n.DonateStrings
 import com.antimobile.callhs.i18n.appStrings
 import com.antimobile.callhs.ui.components.PanelCard
+import com.antimobile.callhs.ui.components.AppToastType
 import com.antimobile.callhs.ui.components.RemoteImage
 import com.antimobile.callhs.ui.components.RemoteImageState
 import com.antimobile.callhs.ui.components.rememberRemoteImage
@@ -545,7 +546,11 @@ private fun QrCard(s: DonateStrings, amount: Long) {
                     scope.launch {
                         val name = "callhs_ung_ho_" + (if (amount > 0L) amount.toString() else "mo") + ".png"
                         val uri = withContext(Dispatchers.IO) { QrShare.saveToGallery(context, bmp, name) }
-                        CallActions.toast(context, if (uri != null) s.qrSaved else s.qrSaveFailed)
+                        CallActions.toast(
+                            context,
+                            if (uri != null) s.qrSaved else s.qrSaveFailed,
+                            if (uri != null) AppToastType.Success else AppToastType.Error
+                        )
                     }
                 }
                 QrActionButton(Icons.Rounded.Share, s.shareQr, enabled = displayBitmap != null) {
@@ -684,7 +689,7 @@ private fun CopyRow(label: String, value: String, copyValue: String?, highlight:
         Modifier.clickable {
             copyToClipboard(context, label, copyValue)
             copied = true
-            CallActions.toast(context, s.copied)
+            CallActions.toast(context, s.copied, AppToastType.Success)
         }
     } else Modifier
 
@@ -772,7 +777,7 @@ private fun BankAppItem(app: BankApp, amount: Long, modifier: Modifier) {
                 // Deeplink đi qua trang chuyển hướng https của VietQR → cần mạng. Ngoại tuyến thì trình duyệt
                 // vẫn mở nhưng trang không tải được (app ngân hàng không bật) → báo rõ thay vì im lặng.
                 if (!NetworkUtil.isOnline(context)) {
-                    CallActions.toast(context, s.bankAppNeedNetwork)
+                    CallActions.toast(context, s.bankAppNeedNetwork, AppToastType.Warning)
                     return@clickable
                 }
                 val ok = runCatching {
@@ -781,7 +786,7 @@ private fun BankAppItem(app: BankApp, amount: Long, modifier: Modifier) {
                             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     )
                 }.isSuccess
-                if (!ok) CallActions.toast(context, s.bankAppOpenFailed)
+                if (!ok) CallActions.toast(context, s.bankAppOpenFailed, AppToastType.Error)
             }
             .padding(vertical = 10.dp, horizontal = 2.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -880,7 +885,7 @@ private fun copyToClipboard(context: Context, label: String, value: String) {
 private suspend fun shareQr(context: Context, bmp: Bitmap, amount: Long, s: DonateStrings) {
     val uri = withContext(Dispatchers.IO) { QrShare.cacheForShare(context, bmp) }
     if (uri == null) {
-        CallActions.toast(context, s.qrSaveFailed)
+        CallActions.toast(context, s.qrSaveFailed, AppToastType.Error)
         return
     }
     val body = buildString {

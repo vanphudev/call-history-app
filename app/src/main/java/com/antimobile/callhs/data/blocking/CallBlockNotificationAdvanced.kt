@@ -200,6 +200,10 @@ object CallBlockNotificationSettings {
             config.copy(periods = config.periods.map { if (it.period == value.period) value else it }),
         )
 
+    /** Thay thế nguyên tử toàn bộ cấu hình, dùng khi khôi phục một bản sao lưu. */
+    fun replace(context: Context, value: BlockNotificationAdvancedConfig): Boolean =
+        save(context, value)
+
     fun validateAndPersistCustomSound(
         context: Context,
         uri: Uri,

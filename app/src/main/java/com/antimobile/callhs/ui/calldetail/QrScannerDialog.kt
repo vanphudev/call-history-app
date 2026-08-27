@@ -92,6 +92,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.Observer
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.antimobile.callhs.i18n.appStrings
+import com.antimobile.callhs.ui.components.AppToastType
 import com.antimobile.callhs.util.CallActions
 import com.antimobile.callhs.util.QrScanHistoryStore
 import com.antimobile.callhs.util.hasPermission
@@ -249,7 +250,7 @@ private fun QrScannerContent(onResult: (String) -> Unit, onClose: () -> Unit) {
                 val text = decodeImageUri(context, uri, scanner)
                 decodingImage = false
                 if (text != null) deliver(text)
-                else CallActions.toast(context, appStrings().qrScanner.noQrInImage)
+                else CallActions.toast(context, appStrings().qrScanner.noQrInImage, AppToastType.Warning)
             }
         }
     }

@@ -84,6 +84,7 @@ import com.antimobile.callhs.data.model.CallEntry
 import com.antimobile.callhs.data.model.CallNumberDetail
 import com.antimobile.callhs.i18n.appStrings
 import com.antimobile.callhs.ui.components.Avatar
+import com.antimobile.callhs.ui.components.AppToastType
 import com.antimobile.callhs.ui.components.EmptyState
 import com.antimobile.callhs.ui.components.LoadingState
 import com.antimobile.callhs.ui.components.PanelCard
@@ -349,14 +350,14 @@ fun CallDetailScreen(
                         val label = categoryLabel(cat)
                         if (desired) {
                             when (categoryRepo.addMember(cat.id, number)) {
-                                AddMemberResult.ADDED -> CallActions.toast(context, appStrings().category.addedTo(label))
-                                AddMemberResult.FULL -> CallActions.toast(context, appStrings().category.maxMembers)
+                                AddMemberResult.ADDED -> CallActions.toast(context, appStrings().category.addedTo(label), AppToastType.Success)
+                                AddMemberResult.FULL -> CallActions.toast(context, appStrings().category.maxMembers, AppToastType.Warning)
                                 AddMemberResult.ALREADY -> CallActions.toast(context, appStrings().category.alreadyAdded)
-                                AddMemberResult.INVALID -> CallActions.toast(context, appStrings().category.invalidNumber)
+                                AddMemberResult.INVALID -> CallActions.toast(context, appStrings().category.invalidNumber, AppToastType.Error)
                             }
                         } else {
                             categoryRepo.removeMember(cat.id, PhoneKey.of(number))
-                            CallActions.toast(context, appStrings().category.removedFrom(label))
+                            CallActions.toast(context, appStrings().category.removedFrom(label), AppToastType.Success)
                         }
                     }
                 },
