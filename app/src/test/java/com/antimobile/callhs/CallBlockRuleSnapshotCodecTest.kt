@@ -7,7 +7,6 @@ import com.antimobile.callhs.data.blocking.CallBlockRuleMatcher
 import com.antimobile.callhs.data.blocking.CallBlockRuleSnapshotCodec
 import com.antimobile.callhs.data.blocking.CallBlockRuleSnapshotStore
 import com.antimobile.callhs.data.blocking.CallBlockRuleType
-import com.antimobile.callhs.data.blocking.BrandNameRuleCodec
 import com.antimobile.callhs.data.blocking.SpecialCallCondition
 import java.util.Base64
 import kotlinx.coroutines.CompletableDeferred
@@ -146,29 +145,6 @@ class CallBlockRuleSnapshotCodecTest {
         assertEquals(
             listOf(validPhone),
             CallBlockRuleSnapshotCodec.decode(CallBlockRuleSnapshotCodec.encode(listOf(validPhone))),
-        )
-    }
-
-    @Test
-    fun brandNameRejectsContactScopeAndKeepsAllVisibleScope() {
-        val raw = BrandNameRuleCodec.encode(listOf("Vietcombank"))
-        val invalidScoped = rule(
-            CallBlockRuleType.BRAND_NAME,
-            raw,
-            id = 33L,
-            scope = CallBlockScope.SAVED_CONTACT,
-        )
-        val validAll = rule(
-            CallBlockRuleType.BRAND_NAME,
-            raw,
-            id = 34L,
-            scope = CallBlockScope.ALL_VISIBLE_NUMBERS,
-        )
-
-        assertNull(CallBlockRuleSnapshotCodec.decode(CallBlockRuleSnapshotCodec.encode(listOf(invalidScoped))))
-        assertEquals(
-            listOf(validAll),
-            CallBlockRuleSnapshotCodec.decode(CallBlockRuleSnapshotCodec.encode(listOf(validAll))),
         )
     }
 

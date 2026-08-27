@@ -55,6 +55,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.antimobile.callhs.i18n.appStrings
 import com.antimobile.callhs.ui.components.AppMessageDialog
+import com.antimobile.callhs.ui.components.AppToastHost
+import com.antimobile.callhs.ui.components.AppToastType
 import com.antimobile.callhs.ui.components.DialogButton
 import com.antimobile.callhs.ui.components.PanelCard
 import com.antimobile.callhs.ui.components.SheetCloseButton
@@ -132,7 +134,8 @@ fun MessageTemplateSheet(
     ) {
         // Cấp lại density theo cỡ chữ người dùng — ModalBottomSheet là cửa sổ Compose riêng (xem [ProvideAppDensity]).
         ProvideAppDensity {
-        Column(Modifier.fillMaxWidth().height(sheetHeight)) {
+        Box(Modifier.fillMaxWidth().height(sheetHeight)) {
+        Column(Modifier.fillMaxSize()) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 2.dp, bottom = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -206,12 +209,14 @@ fun MessageTemplateSheet(
                     .padding(top = 8.dp, bottom = navBottom + 16.dp),
                 onClick = {
                     if (templates.size >= MessageTemplateStore.MAX) {
-                        CallActions.toast(context, appStrings().templates.maxReached(MessageTemplateStore.MAX))
+                        CallActions.toast(context, appStrings().templates.maxReached(MessageTemplateStore.MAX), AppToastType.Warning)
                     } else {
                         closeThen { onCreate() }
                     }
                 }
             )
+        }
+        AppToastHost(modifier = Modifier.matchParentSize())
         }
         }
     }

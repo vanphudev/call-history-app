@@ -2,7 +2,6 @@ package com.antimobile.callhs.i18n
 
 import com.antimobile.callhs.data.blocking.ContactRuleCodec
 import com.antimobile.callhs.data.blocking.CallHistoryRuleCodec
-import com.antimobile.callhs.data.blocking.BrandNameRuleCodec
 import com.antimobile.callhs.data.blocking.GeographicBlockOption
 import com.antimobile.callhs.data.blocking.SpecialCallCondition
 import java.time.DayOfWeek
@@ -20,6 +19,7 @@ object ViStrings : AppStrings {
     override val timeline: TimelineStrings = Timeline
     override val contacts: ContactsStrings = Contacts
     override val settings: SettingsStrings = Settings
+    override val outgoingCall: OutgoingCallStrings = OutgoingCall
     override val fontSize: FontSizeStrings = FontSize
     override val repeatStats: RepeatStatsStrings = RepeatStats
     override val detailedStats: DetailedStatsStrings = DetailedStats
@@ -340,6 +340,70 @@ object ViStrings : AppStrings {
         override val pickerTitle = "Chọn danh bạ cơ quan"
         override val pickerNote =
             "Dữ liệu tải từ trang chính thức trên GitHub, lưu tại máy và làm mới tối đa 7 ngày/lần. Các tỉnh/thành khác sẽ được bổ sung sau."
+    }
+
+    private object OutgoingCall : OutgoingCallStrings {
+        override val settingsSection = "Cuộc gọi đi"
+        override val settingsTitle = "Cảnh báo cuộc gọi đi"
+        override val settingsSubtitle = "Ngoại mạng · Danh sách chặn · Danh sách cho phép"
+        override val settingsOpen = "Mở cài đặt cuộc gọi đi"
+
+        override val screenTitle = "Cài đặt cuộc gọi đi"
+        override val activationSection = "Kích hoạt"
+        override val enabledTitle = "Nhận biết cuộc gọi đi"
+        override val enabledSubtitle = "Hiển thị cảnh báo ngay khi bạn gọi từ ứng dụng Điện thoại mặc định"
+        override val roleGateTitle = "Bật cảnh báo cuộc gọi đi"
+        override val roleGateBody =
+            "Android yêu cầu bạn chọn CallHS làm ứng dụng chuyển tiếp cuộc gọi. Quyền này chỉ giúp CallHS nhận số và SIM trước khi gọi để hiển thị cảnh báo; CallHS luôn giữ nguyên số, không chuyển hướng và không chặn cuộc gọi đi."
+        override val roleGateAction = "Chọn CallHS để nhận biết cuộc gọi"
+        override val roleUnavailableTitle = "Thiết bị chưa hỗ trợ"
+        override val roleUnavailableBody =
+            "Thiết bị này không cung cấp vai trò chuyển tiếp cuộc gọi của Android nên CallHS chưa thể nhận biết cuộc gọi đi."
+        override val roleActive = "Đã được Android cho phép nhận biết cuộc gọi"
+        override val roleRequired = "Cần cấp quyền nhận dạng cuộc gọi của Android"
+        override val roleUnavailable = "Thiết bị này không hỗ trợ vai trò nhận dạng cuộc gọi"
+        override val roleExplanation =
+            "Android cấp vai trò xử lý cuộc gọi đi để CallHS nhận số và SIM trước khi gọi. CallHS luôn giữ nguyên số, không chuyển hướng và không chặn cuộc gọi đi."
+        override val conditionsSection = "Thông báo khi"
+        override val offNetworkTitle = "Gọi đến số ngoại mạng"
+        override val offNetworkSubtitle = "Chỉ cảnh báo khi xác định chắc nhà mạng của SIM gọi và số nhận"
+        override val simPermissionTitle = "Chưa có quyền đọc thông tin SIM"
+        override val simPermissionSubtitle =
+            "Quyền Điện thoại chỉ dùng để xác định nhà mạng của SIM đang gọi. Không cần quyền Nhật ký cuộc gọi."
+        override val grantSimPermission = "Cấp quyền SIM"
+        override val blocklistTitle = "Số nằm trong danh sách chặn"
+        override val blocklistSubtitle = "Dùng danh sách số chặn hiện có, kể cả khi màn Chặn cuộc gọi đang tắt"
+        override val allowlistTitle = "Số nằm trong danh sách cho phép"
+        override val allowlistSubtitle = "Xác nhận nhanh số gọi đi đã có trong danh sách cho phép"
+        override val presentationSection = "Kiểu hiển thị"
+        override val presentationTitle = "Cách cảnh báo"
+        override val headsUpTitle = "Thông báo nổi (heads-up)"
+        override val headsUpSubtitle = "Hiện ở đầu màn hình và lưu trong thanh thông báo"
+        override val overlayTitle = "Popup trên ứng dụng khác"
+        override val overlaySubtitle = "Hiện hộp thoại theo kiểu AppDialog trên màn hình đang gọi"
+        override val overlayPermissionTitle = "Chưa có quyền hiển thị trên ứng dụng khác"
+        override val overlayPermissionSubtitle =
+            "Nếu chưa cấp quyền, CallHS sẽ tự dùng thông báo heads-up làm phương án dự phòng."
+        override val grantOverlayPermission = "Cấp quyền hiển thị"
+        override val notificationPermissionTitle = "Thông báo nổi chưa sẵn sàng"
+        override val notificationPermissionSubtitle =
+            "Cho phép thông báo và giữ kênh cảnh báo ở mức ưu tiên cao để heads-up có thể xuất hiện."
+        override val grantNotificationPermission = "Cho phép thông báo"
+        override val openNotificationSettings = "Mở cài đặt thông báo"
+        override val privacyNote =
+            "Số gọi và thông tin nhà mạng chỉ được xử lý trên thiết bị. CallHS không chuyển hướng, thay đổi hay tự thực hiện cuộc gọi."
+
+        override val notificationChannelName = "Cảnh báo cuộc gọi đi"
+        override val notificationChannelDescription =
+            "Cảnh báo ngoại mạng và trạng thái danh sách khi người dùng bắt đầu cuộc gọi đi"
+        override val alertBlocklistTitle = "Cảnh báo số trong danh sách chặn"
+        override val alertOffNetworkTitle = "Cảnh báo cuộc gọi ngoại mạng"
+        override val alertAllowlistTitle = "Số thuộc danh sách cho phép"
+        override val reasonBlocklist = "Số này nằm trong danh sách chặn."
+        override val reasonAllowlist = "Số này nằm trong danh sách cho phép."
+        override fun reasonOffNetwork(simCarrier: String, targetCarrier: String) =
+            "Cuộc gọi ngoại mạng: $simCarrier → $targetCarrier."
+        override val close = "Đóng"
     }
 
     private object FontSize : FontSizeStrings {
@@ -1265,7 +1329,7 @@ object ViStrings : AppStrings {
             4 -> "Không thấy thông báo sau khi chặn"
             5 -> "Thông báo không có âm thanh, rung hoặc cửa sổ nổi"
             6 -> "Không thấy cuộc gọi trong Lịch sử chặn"
-            else -> "Không chặn được số ẩn, VoIP hoặc tên thương hiệu"
+            else -> "Không chặn được số ẩn hoặc VoIP"
         }
         override fun commonIssueCause(issue: Int) = when (issue) {
             1 -> "CallHS có thể không còn là ứng dụng sàng lọc cuộc gọi; Bảo vệ cuộc gọi đang tắt, tạm dừng hoặc nằm trong khung giờ tạm dừng. Sau khi buộc dừng ứng dụng, hoặc trước lần mở khóa đầu tiên sau khi khởi động lại, Android cũng có thể chưa chuyển cuộc gọi cho CallHS."
@@ -1274,7 +1338,7 @@ object ViStrings : AppStrings {
             4 -> "Thông báo có thể đang tắt trong CallHS, bị tắt ở khung giờ hiện tại, chưa được Android cấp quyền, hoặc kênh thông báo đã bị tắt. Chỉ cuộc gọi thực sự bị chặn mới tạo thông báo; Chỉ tắt tiếng và Bỏ qua không tạo cảnh báo chặn."
             5 -> "Âm thanh, rung hoặc kiểu hiển thị có thể đang tắt trong Cài đặt thông báo nâng cao. Chế độ Không làm phiền, mức ưu tiên của kênh và cài đặt thông báo riêng của hãng điện thoại cũng có thể hạn chế cảnh báo."
             6 -> "Lịch sử của CallHS chỉ ghi cuộc gọi thực sự bị chặn. Cuộc gọi được cho qua hoặc chỉ tắt tiếng không được ghi tại đây; Lịch sử chặn cũng không phải là bản sao Nhật ký cuộc gọi của Android."
-            else -> "Android chuẩn thường chỉ chuyển cho ứng dụng sàng lọc những cuộc gọi có số điện thoại hiển thị hợp lệ. Số ẩn/không khả dụng, cuộc gọi VoIP/SIP và tên thương hiệu phụ thuộc ứng dụng Điện thoại cùng phần mở rộng của từng hãng máy nên có thể không tới CallHS."
+            else -> "Android chuẩn thường chỉ chuyển cho ứng dụng sàng lọc những cuộc gọi có số điện thoại hiển thị hợp lệ. Số ẩn/không khả dụng và cuộc gọi VoIP/SIP phụ thuộc ứng dụng Điện thoại cùng phần mở rộng của từng hãng máy nên có thể không tới CallHS."
         }
         override fun commonIssueFix(issue: Int) = when (issue) {
             1 -> "Mở lại CallHS, cấp lại quyền chặn cuộc gọi và bật Bảo vệ cuộc gọi. Kiểm tra lịch bật/tạm dừng; sau khi khởi động lại hãy mở khóa thiết bị ít nhất một lần."
@@ -1385,7 +1449,6 @@ object ViStrings : AppStrings {
         override val typeContacts = "Theo danh bạ"
         override val typeCallHistory = "Theo lịch sử cuộc gọi"
         override val typeCountryAndAreaCode = "Quốc gia & đầu số Việt Nam"
-        override val typeBrandName = "Theo Brandname"
         override val specialTitle = "Chọn một loại cuộc gọi"
         override val specialPrivate = "Cuộc gọi ẩn số"
         override val specialPrivateDesc =
@@ -1405,7 +1468,6 @@ object ViStrings : AppStrings {
         override val learnSip = "SIP là gì?"
         override val learnUri = "URI là gì?"
         override val learnCli = "CLI là gì?"
-        override val learnCnam = "CNAM là gì?"
         override val voipExplanation =
             "VoIP (Voice over Internet Protocol) là công nghệ truyền giọng nói qua mạng IP như Wi-Fi, 4G/5G hoặc Internet thay vì chỉ dùng mạng thoại truyền thống.\n\n" +
                 "Một cuộc gọi VoIP có thể hiển thị số điện thoại thông thường hoặc một định danh SIP. VoIP chỉ mô tả cách cuộc gọi được truyền, không có nghĩa cuộc gọi đó là spam hay lừa đảo.\n\n" +
@@ -1420,27 +1482,7 @@ object ViStrings : AppStrings {
                 "CallHS chỉ phân loại điều kiện SIP khi URI hợp lệ, có scheme sip: hoặc sips: và có phần user trước dấu @."
         override val cliExplanation =
             "CLI (Calling Line Identification) là thông tin số điện thoại của bên gọi mà mạng hoặc dịch vụ cuộc gọi cung cấp, ví dụ +84912345678. CallHS dùng CLI cho các quy tắc theo số, đầu số, đuôi số, độ dài, nhà mạng hoặc khu vực.\n\n" +
-                "CLI khác với CNAM là tên bên gọi và cũng khác với tên người dùng tự lưu trong Danh bạ. CLI có thể bị ẩn hoặc giả mạo, vì vậy số hiển thị không bảo đảm tuyệt đối danh tính thật của người gọi."
-        override val cnamExplanation =
-            "CNAM (Calling Name) là tên bên gọi do mạng hoặc dịch vụ cuộc gọi cung cấp để hiển thị, ví dụ Vietcombank. CallHS dùng dữ liệu này cho quy tắc Brandname.\n\n" +
-                "CNAM không phải CLI và không phải contactDisplayName — tên người dùng tự lưu trong Danh bạ. Việc đổi tên một liên hệ trên máy không làm thay đổi CNAM.\n\n" +
-                "CallScreeningService chuẩn không cung cấp callerDisplayName. CallHS chỉ có thể so khớp Brandname khi thiết bị hoặc nhà sản xuất mở rộng callback và chuyển tên này tới ứng dụng."
-        override val brandNamePickerTitle = "Chọn Brandname"
-        override val brandNamePickerOpen = "Chọn hoặc nhập Brandname"
-        override val brandNameCaseSensitiveNote =
-            "Tối đa 5 tên. Ví dụ “Vietcombank” khác “VIETCOMBANK”. Bạn có thể chọn gợi ý hoặc tự nhập."
-        override val brandNameInputHint = "Nhập chính xác Brandname"
-        override val brandNameAdd = "Thêm"
-        override fun brandNameSelectedCount(count: Int, max: Int) = "Đã chọn $count/$max tên"
-        override val brandNameTelecomCategory = "Nhà mạng"
-        override val brandNameBankCategory = "Ngân hàng"
-        override val brandNameWalletCategory = "Ví điện tử"
-        override val brandNameServiceCategory = "Dịch vụ & cơ quan"
-        override val brandNameSpamCategory = "Nhãn cảnh báo spam/lừa đảo"
-        override val brandNameSpamDisclaimer =
-            "Đây là nhãn cảnh báo thường gặp, không phải danh sách Brandname lừa đảo đã được xác nhận. Nội dung hiển thị có thể khác theo thiết bị."
-        override val brandNameAndroidLimit =
-            "CallScreeningService chuẩn không cung cấp callerDisplayName. Brandname chỉ có thể được nhận diện khi thiết bị/OEM mở rộng callback và chuyển tên này tới CallHS; nếu không, ứng dụng không có dữ liệu Brandname để so khớp."
+                "CLI là dữ liệu số điện thoại, không phải tên người dùng tự lưu trong Danh bạ. CLI có thể bị ẩn hoặc giả mạo, vì vậy số hiển thị không bảo đảm tuyệt đối danh tính thật của người gọi."
         override val specialAndroidLimit =
             "Android chuẩn chỉ chuyển handle tel: vào CallScreeningService. SIP/sips là khả năng mở rộng tùy thiết bị hoặc OEM (Original Equipment Manufacturer — nhà sản xuất thiết bị); nếu URI không được chuyển tới CallHS thì ứng dụng không có dữ liệu để nhận diện tiêu chí SIP."
         override val contactPickerTitle = "Chọn liên hệ"
@@ -1464,7 +1506,6 @@ object ViStrings : AppStrings {
         override val callHistoryPickerPreviouslySelectedNote =
             "Các số này không nằm trong lịch sử đang hiển thị. Bạn vẫn có thể bỏ chọn tại đây."
         override val validationSelectSpecial = "Hãy chọn ít nhất một loại cuộc gọi."
-        override val validationSelectBrandName = "Hãy chọn hoặc nhập ít nhất một Brandname."
         override val validationSelectContact = "Hãy chọn ít nhất một liên hệ trong danh bạ."
         override val validationSelectCallHistory = "Hãy chọn ít nhất một số trong lịch sử cuộc gọi."
         override val regionPickerTitle = "Chọn quốc gia & đầu số Việt Nam"
@@ -1512,9 +1553,6 @@ object ViStrings : AppStrings {
             "repeat_unanswered" -> "Quy tắc cũ · Gọi lặp chưa trả lời"
             "spam_risk" -> typeSpamRisk
             "special" -> specialSummary(value)
-            "brand_name" -> BrandNameRuleCodec.decode(value).let { names ->
-                if (names.isEmpty()) typeBrandName else "$typeBrandName: ${names.joinToString(", ")}"
-            }
             "contacts" -> contactsSummary(value)
             "call_history" -> callHistorySummary(value)
             "geographic" -> regionSummary(value)
@@ -1629,11 +1667,13 @@ object ViStrings : AppStrings {
         override val secCategories = "Phân loại nhóm"
         override val secCategoriesSub = "Nhóm & số điện thoại thành viên"
         override val secBlockRules = "Quy tắc chặn cuộc gọi"
-        override val secBlockRulesSub = "Quy tắc, phương thức xử lý, trạng thái bảo vệ và thông báo"
+        override val secBlockRulesSub = "Quy tắc, danh sách, lịch, bảo vệ và thông báo nâng cao"
         override val secBlockHistory = "Lịch sử cuộc gọi bị chặn"
         override val secBlockHistorySub = "Các sự kiện CallHS đã chặn"
         override val secMyNumber = "Số của tôi"
         override val secMyNumberSub = "Số điện thoại của bạn theo SIM"
+        override val secOutgoingCall = "Cài đặt cuộc gọi đi"
+        override val secOutgoingCallSub = "Trạng thái, điều kiện cảnh báo và kiểu hiển thị"
         override val secDisplay = "Cài đặt hiển thị"
         override val secDisplaySub = "Giao diện, ngôn ngữ, cỡ chữ"
         override fun itemsCount(n: Int) = "$n mục"

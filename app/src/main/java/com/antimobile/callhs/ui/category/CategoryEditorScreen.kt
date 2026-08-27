@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.antimobile.callhs.i18n.appStrings
 import com.antimobile.callhs.ui.components.AppMessageDialog
+import com.antimobile.callhs.ui.components.AppToastType
 import com.antimobile.callhs.ui.components.Avatar
 import com.antimobile.callhs.ui.components.DialogButton
 import com.antimobile.callhs.ui.components.PanelCard
@@ -157,7 +158,7 @@ fun CategoryEditorScreen(
         if (!nameValid || !initialized) return
         val finalName = if (builtIn) (vm.category?.name ?: name.text) else name.text.trim()
         vm.save(finalName, description.text, iconKey, colorArgb) { id ->
-            if (id == null) CallActions.toast(context, s.maxCategories) else onExit()
+            if (id == null) CallActions.toast(context, s.maxCategories, AppToastType.Warning) else onExit()
         }
     }
 
@@ -203,7 +204,11 @@ fun CategoryEditorScreen(
                     onOpenNumber = onOpenNumber,
                     onRemove = { row ->
                         vm.removeMember(row.phoneKey)
-                        CallActions.toast(context, s.removedFrom(vm.category?.let { categoryLabel(it) }.orEmpty()))
+                        CallActions.toast(
+                            context,
+                            s.removedFrom(vm.category?.let { categoryLabel(it) }.orEmpty()),
+                            AppToastType.Success
+                        )
                     },
                 )
             }

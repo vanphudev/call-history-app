@@ -36,10 +36,8 @@ import androidx.compose.material.icons.automirrored.rounded.CallMade
 import androidx.compose.material.icons.automirrored.rounded.CallReceived
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Contacts
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.LocationOn
@@ -85,9 +83,6 @@ import com.antimobile.callhs.data.blocking.CallBlockAction
 import com.antimobile.callhs.data.blocking.CallBlockRuleType
 import com.antimobile.callhs.data.blocking.CallHistoryRuleCodec
 import com.antimobile.callhs.data.blocking.ContactRuleCodec
-import com.antimobile.callhs.data.blocking.BrandNamePresetCatalog
-import com.antimobile.callhs.data.blocking.BrandNamePresetCategory
-import com.antimobile.callhs.data.blocking.BrandNameRuleCodec
 import com.antimobile.callhs.data.blocking.GeographicBlockKind
 import com.antimobile.callhs.data.blocking.GeographicBlockOption
 import com.antimobile.callhs.data.blocking.SaveBlockRuleResult
@@ -95,6 +90,7 @@ import com.antimobile.callhs.data.blocking.SpecialCallCondition
 import com.antimobile.callhs.i18n.CallBlockStrings
 import com.antimobile.callhs.i18n.appStrings
 import com.antimobile.callhs.ui.components.AppBottomSheet
+import com.antimobile.callhs.ui.components.AppToastType
 import com.antimobile.callhs.ui.components.AppMessageDialog
 import com.antimobile.callhs.ui.components.DialogButton
 import com.antimobile.callhs.ui.components.FilterOptionRow
@@ -117,7 +113,6 @@ private enum class CallerIdentityTerm {
     SIP,
     URI,
     CLI,
-    CNAM,
 }
 
 /**
@@ -151,7 +146,6 @@ fun CallBlockRuleEditorScreen(
     var showTypePicker by remember { mutableStateOf(false) }
     var showCarrierPicker by remember { mutableStateOf(false) }
     var showSpecialPicker by remember { mutableStateOf(false) }
-    var showBrandNamePicker by remember { mutableStateOf(false) }
     var showGeographicPicker by remember { mutableStateOf(false) }
     var showContactPicker by remember { mutableStateOf(false) }
     var showCallHistoryPicker by remember { mutableStateOf(false) }
@@ -209,9 +203,9 @@ fun CallBlockRuleEditorScreen(
                     vm.save(type, value.text, enabled, scope, action) { result ->
                         when (result) {
                             SaveBlockRuleResult.SAVED -> onExit()
-                            SaveBlockRuleResult.INVALID -> CallActions.toast(context, s.invalidRule)
-                            SaveBlockRuleResult.DUPLICATE -> CallActions.toast(context, s.duplicateRule)
-                            SaveBlockRuleResult.FULL -> CallActions.toast(context, s.maxRules)
+                            SaveBlockRuleResult.INVALID -> CallActions.toast(context, s.invalidRule, AppToastType.Error)
+                            SaveBlockRuleResult.DUPLICATE -> CallActions.toast(context, s.duplicateRule, AppToastType.Warning)
+                            SaveBlockRuleResult.FULL -> CallActions.toast(context, s.maxRules, AppToastType.Warning)
                             SaveBlockRuleResult.NOT_FOUND -> onExit()
                         }
                     }
@@ -251,25 +245,6 @@ fun CallBlockRuleEditorScreen(
                         if (value.text.isBlank()) {
                             Spacer(Modifier.height(7.dp))
                             Text(s.validationSelectSpecial, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
-                        }
-                    }
-                    CallBlockRuleType.BRAND_NAME -> {
-                        EditorLabel(s.brandNamePickerTitle)
-                        Spacer(Modifier.height(8.dp))
-                        val selectedCount = BrandNameRuleCodec.decode(value.text).size
-                        PickerRow(
-                            icon = Icons.Rounded.Policy,
-                            value = if (selectedCount == 0) {
-                                s.brandNamePickerOpen
-                            } else {
-                                s.brandNameSelectedCount(selectedCount, BrandNameRuleCodec.MAX_NAMES)
-                            },
-                            placeholder = selectedCount == 0,
-                            onClick = { focus.clearFocus(); showBrandNamePicker = true },
-                        )
-                        if (selectedCount == 0) {
-                            Spacer(Modifier.height(7.dp))
-                            Text(s.validationSelectBrandName, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                         }
                     }
                     CallBlockRuleType.CONTACTS -> {
@@ -486,7 +461,6 @@ fun CallBlockRuleEditorScreen(
                             CallBlockRuleType.SPAM_RISK -> CallBlockRuleMatcher.SPAM_RISK_PROFILE
                             CallBlockRuleType.CARRIER,
                             CallBlockRuleType.SPECIAL,
-                            CallBlockRuleType.BRAND_NAME,
                             CallBlockRuleType.CONTACTS,
                             CallBlockRuleType.CALL_HISTORY,
                             CallBlockRuleType.GEOGRAPHIC -> ""
@@ -500,9 +474,6 @@ fun CallBlockRuleEditorScreen(
                     )
                     if (picked == CallBlockRuleType.SPAM_RISK) {
                         actionKey = CallBlockAction.BLOCK.storageKey
-                    }
-                    if (picked == CallBlockRuleType.BRAND_NAME) {
-                        scopeKey = CallBlockScope.ALL_VISIBLE_NUMBERS.storageKey
                     }
                 }
             },
@@ -529,13 +500,6 @@ fun CallBlockRuleEditorScreen(
                     scopeKey = CallBlockScope.ALL_VISIBLE_NUMBERS.storageKey
                 }
             },
-        )
-    }
-    if (showBrandNamePicker) {
-        BrandNameSheet(
-            selected = BrandNameRuleCodec.decode(value.text),
-            onDismiss = { showBrandNamePicker = false },
-            onConfirm = { names -> value = TextFieldValue(BrandNameRuleCodec.encode(names)) },
         )
     }
     if (showGeographicPicker) {
@@ -582,7 +546,6 @@ private fun CallerIdentityTermLinks(
         CallerIdentityTerm.SIP,
         CallerIdentityTerm.URI,
         CallerIdentityTerm.CLI,
-        CallerIdentityTerm.CNAM,
     ).forEach { term ->
         val interactionSource = remember(term) { MutableInteractionSource() }
         val isPressed by interactionSource.collectIsPressedAsState()
@@ -634,7 +597,6 @@ private fun CallerIdentityTerm.title(s: CallBlockStrings): String = when (this) 
     CallerIdentityTerm.SIP -> s.learnSip
     CallerIdentityTerm.URI -> s.learnUri
     CallerIdentityTerm.CLI -> s.learnCli
-    CallerIdentityTerm.CNAM -> s.learnCnam
 }
 
 private fun CallerIdentityTerm.explanation(s: CallBlockStrings): String = when (this) {
@@ -642,7 +604,6 @@ private fun CallerIdentityTerm.explanation(s: CallBlockStrings): String = when (
     CallerIdentityTerm.SIP -> s.sipExplanation
     CallerIdentityTerm.URI -> s.uriExplanation
     CallerIdentityTerm.CLI -> s.cliExplanation
-    CallerIdentityTerm.CNAM -> s.cnamExplanation
 }
 
 @Composable
@@ -908,174 +869,6 @@ private fun SpecialConditionSheet(
 }
 
 @Composable
-private fun BrandNameSheet(
-    selected: List<String>,
-    onDismiss: () -> Unit,
-    onConfirm: (List<String>) -> Unit,
-) {
-    val s = appStrings().blocker
-    var temporary by remember(selected) { mutableStateOf(selected.take(BrandNameRuleCodec.MAX_NAMES)) }
-    var input by remember { mutableStateOf("") }
-    val normalizedInput = input.trim()
-    val canAddInput = BrandNameRuleCodec.isAllowedName(normalizedInput) &&
-        normalizedInput !in temporary &&
-        temporary.size < BrandNameRuleCodec.MAX_NAMES
-    val addInput = {
-        if (canAddInput) {
-            temporary = temporary + normalizedInput
-            input = ""
-        }
-    }
-    AppBottomSheet(
-        onDismiss = onDismiss,
-        title = s.brandNamePickerTitle,
-        maxHeightFraction = 0.9f,
-        sheetGesturesEnabled = false,
-        showCloseButton = true,
-    ) { close ->
-        BrandNameSelector(
-            selected = temporary,
-            input = input,
-            canAddInput = canAddInput,
-            onInputChange = { input = it },
-            onAddInput = addInput,
-            onToggleName = { name ->
-                temporary = if (name in temporary) {
-                    temporary - name
-                } else if (temporary.size < BrandNameRuleCodec.MAX_NAMES) {
-                    temporary + name
-                } else {
-                    temporary
-                }
-            },
-            s = s,
-        )
-        SheetWarningNotice(s.brandNameAndroidLimit)
-        SheetConfirmButton(
-            text = s.contactPickerDone,
-            enabled = temporary.isNotEmpty(),
-            onClick = {
-                onConfirm(temporary)
-                close()
-            },
-        )
-    }
-}
-
-@Composable
-private fun BrandNameSelector(
-    selected: List<String>,
-    input: String,
-    canAddInput: Boolean,
-    onInputChange: (String) -> Unit,
-    onAddInput: () -> Unit,
-    onToggleName: (String) -> Unit,
-    s: CallBlockStrings,
-) {
-    Text(
-        text = s.brandNameCaseSensitiveNote,
-        style = MaterialTheme.typography.bodySmall,
-        color = TextSecondary,
-        modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
-    )
-    SheetSectionLabel(s.brandNameSelectedCount(selected.size, BrandNameRuleCodec.MAX_NAMES))
-    selected.forEach { name ->
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onToggleName(name) }
-                .padding(start = 24.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = name,
-                style = MaterialTheme.typography.bodyMedium,
-                color = TextPrimary,
-                modifier = Modifier.weight(1f),
-            )
-            Icon(
-                imageVector = Icons.Rounded.Close,
-                contentDescription = null,
-                tint = TextSecondary,
-                modifier = Modifier.size(19.dp),
-            )
-        }
-    }
-    Row(
-        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .height(50.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(FieldSurface)
-                .padding(horizontal = 14.dp),
-            contentAlignment = Alignment.CenterStart,
-        ) {
-            if (input.isEmpty()) {
-                Text(s.brandNameInputHint, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
-            }
-            BasicTextField(
-                value = input,
-                onValueChange = { value ->
-                    if (value.length <= BrandNameRuleCodec.MAX_NAME_LENGTH && value.none(Char::isISOControl)) {
-                        onInputChange(value)
-                    }
-                },
-                singleLine = true,
-                textStyle = MaterialTheme.typography.bodyMedium.copy(color = TextPrimary),
-                cursorBrush = SolidColor(Primary),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { onAddInput() }),
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-        Spacer(Modifier.width(8.dp))
-        Row(
-            modifier = Modifier
-                .height(50.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(if (canAddInput) Primary else Primary.copy(alpha = 0.45f))
-                .clickable(enabled = canAddInput, onClick = onAddInput)
-                .padding(horizontal = 13.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
-        ) {
-            Icon(Icons.Rounded.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-            Text(s.brandNameAdd, style = MaterialTheme.typography.labelLarge, color = Color.White)
-        }
-    }
-
-    BrandNamePresetCatalog.groups.forEach { group ->
-        SheetSectionLabel(brandNameCategoryLabel(group.category, s), topPadding = 12.dp)
-        group.names.forEach { name ->
-            val isSelected = name in selected
-            FilterOptionRow(
-                icon = if (group.category == BrandNamePresetCategory.SPAM_WARNING) {
-                    Icons.Rounded.WarningAmber
-                } else {
-                    Icons.Rounded.Policy
-                },
-                label = name,
-                selected = isSelected,
-                enabled = isSelected || selected.size < BrandNameRuleCodec.MAX_NAMES,
-                onClick = { onToggleName(name) },
-            )
-        }
-        if (group.category == BrandNamePresetCategory.SPAM_WARNING) {
-            Text(
-                text = s.brandNameSpamDisclaimer,
-                style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary,
-                modifier = Modifier.padding(start = 24.dp, end = 20.dp, bottom = 8.dp),
-            )
-        }
-    }
-}
-
-@Composable
 private fun GeographicOptionsSheet(
     selected: Set<GeographicBlockOption>,
     onDismiss: () -> Unit,
@@ -1225,7 +1018,6 @@ private fun ruleTypeIcon(type: CallBlockRuleType): ImageVector = when (type) {
     CallBlockRuleType.GEOGRAPHIC -> Icons.Rounded.Public
     CallBlockRuleType.SPAM_RISK -> Icons.Rounded.Policy
     CallBlockRuleType.SPECIAL -> Icons.Rounded.PrivacyTip
-    CallBlockRuleType.BRAND_NAME -> Icons.Rounded.Policy
     CallBlockRuleType.CONTACTS -> Icons.Rounded.Contacts
     CallBlockRuleType.CALL_HISTORY -> Icons.Rounded.History
 }
@@ -1241,7 +1033,6 @@ private fun ruleTypeLabel(type: CallBlockRuleType, s: CallBlockStrings): String 
     CallBlockRuleType.GEOGRAPHIC -> s.typeCountryAndAreaCode
     CallBlockRuleType.SPAM_RISK -> s.typeSpamRisk
     CallBlockRuleType.SPECIAL -> s.typeSpecial
-    CallBlockRuleType.BRAND_NAME -> s.typeBrandName
     CallBlockRuleType.CONTACTS -> s.typeContacts
     CallBlockRuleType.CALL_HISTORY -> s.typeCallHistory
 }
@@ -1277,14 +1068,6 @@ private fun specialConditionDescription(condition: SpecialCallCondition, s: Call
     SpecialCallCondition.VOIP -> s.specialVoipDesc
     SpecialCallCondition.SIP_PHONE_NUMBER -> s.specialSipPhoneDesc
     SpecialCallCondition.SIP_TEXT_ID -> s.specialSipTextDesc
-}
-
-private fun brandNameCategoryLabel(category: BrandNamePresetCategory, s: CallBlockStrings): String = when (category) {
-    BrandNamePresetCategory.TELECOM -> s.brandNameTelecomCategory
-    BrandNamePresetCategory.BANK -> s.brandNameBankCategory
-    BrandNamePresetCategory.E_WALLET -> s.brandNameWalletCategory
-    BrandNamePresetCategory.SERVICE -> s.brandNameServiceCategory
-    BrandNamePresetCategory.SPAM_WARNING -> s.brandNameSpamCategory
 }
 
 private fun geographicOptionLabel(option: GeographicBlockOption, s: CallBlockStrings): String = when (option) {

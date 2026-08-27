@@ -2033,7 +2033,11 @@ private fun HistoryTab(
                         BlockedCallItem(
                             row = row,
                             activeInMenu = row.id == activeMenuHistoryId,
-                            onClick = { onOpenNumber(row.rawNumber) },
+                            // SIP history is useful evidence, but it is not a dialable
+                            // PSTN identity and must never open call/SMS/contact actions.
+                            onClick = row.rawNumber
+                                .takeIf(CallHistoryRuleCodec::isSelectableNumber)
+                                ?.let { number -> { onOpenNumber(number) } },
                             onLongPress = { bounds -> onLongPress(row, bounds) },
                         )
                     }
@@ -2706,7 +2710,7 @@ private fun CallBlockRuleCard(
 private fun BlockedCallItem(
     row: BlockedCallHistory,
     activeInMenu: Boolean,
-    onClick: () -> Unit,
+    onClick: (() -> Unit)?,
     onLongPress: (Rect) -> Unit,
 ) {
     val coords = remember { CoordsHolder() }
@@ -2736,13 +2740,15 @@ private fun BlockedCallCard(
 ) {
     val s = appStrings().blocker
     PanelCard(modifier = modifier.fillMaxWidth(), radius = 18.dp) {
-        val clickable = if (onClick != null) {
+        val clickable = if (onClick != null || onLongClick != null) {
             Modifier
                 .fillMaxWidth()
                 .combinedClickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = rememberPressHighlight(),
-                    onClick = onClick,
+                    // Non-dialable SIP rows keep their delete menu on long-press while a
+                    // normal tap deliberately performs no phone/detail action.
+                    onClick = onClick ?: {},
                     onLongClick = onLongClick,
                 )
         } else Modifier.fillMaxWidth()

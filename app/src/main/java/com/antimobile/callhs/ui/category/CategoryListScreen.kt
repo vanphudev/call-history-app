@@ -60,6 +60,7 @@ import com.antimobile.callhs.data.local.CategoryCatalog
 import com.antimobile.callhs.data.local.CategoryRepository
 import com.antimobile.callhs.i18n.appStrings
 import com.antimobile.callhs.ui.components.AppMessageDialog
+import com.antimobile.callhs.ui.components.AppToastType
 import com.antimobile.callhs.ui.components.DialogButton
 import com.antimobile.callhs.ui.components.PanelCard
 import com.antimobile.callhs.ui.components.rememberPressHighlight
@@ -126,7 +127,7 @@ fun CategoryListScreen(
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = navBottom + 18.dp),
             onClick = {
                 if (categories.size >= CategoryRepository.MAX_CATEGORIES) {
-                    CallActions.toast(context, s.maxCategories)
+                    CallActions.toast(context, s.maxCategories, AppToastType.Warning)
                 } else {
                     onCreate()
                 }

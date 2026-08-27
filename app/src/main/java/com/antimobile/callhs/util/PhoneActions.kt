@@ -2,8 +2,8 @@ package com.antimobile.callhs.util
 
 import android.content.Context
 import android.util.Log
-import android.widget.Toast
 import com.antimobile.callhs.i18n.appStrings
+import com.antimobile.callhs.ui.components.AppToastType
 
 /**
  * Điều phối hành động theo SỐ ĐIỆN THOẠI — KHÔNG để logic trong UI.
@@ -27,7 +27,7 @@ object PhoneActions {
         val query = PhoneSearchQuery.buildGoogleQuery(rawPhone)
         Log.d(TAG, "Google search query: $rawPhone -> $query")
         if (query.isBlank()) {
-            Toast.makeText(context, appStrings().actions.invalidPhoneSearch, Toast.LENGTH_SHORT).show()
+            CallActions.toast(context, appStrings().actions.invalidPhoneSearch, AppToastType.Error)
             return
         }
         if (WebSearchIntent.isChromeAvailable(context, query)) {
@@ -44,7 +44,7 @@ object PhoneActions {
         Log.d(TAG, "Open in default browser")
         val opened = runCatching { context.startActivity(WebSearchIntent.openInBrowser(query)) }.isSuccess
         if (!opened) {
-            Toast.makeText(context, appStrings().actions.browserOpenFailed, Toast.LENGTH_SHORT).show()
+            CallActions.toast(context, appStrings().actions.browserOpenFailed, AppToastType.Error)
         }
     }
 
@@ -52,7 +52,7 @@ object PhoneActions {
         val intl = PhoneNormalizer.toIntl(rawPhone)
         Log.d(TAG, "Phone normalized: $rawPhone -> $intl")
         if (intl.isBlank()) {
-            Toast.makeText(context, appStrings().actions.invalidPhone, Toast.LENGTH_SHORT).show()
+            CallActions.toast(context, appStrings().actions.invalidPhone, AppToastType.Error)
             return
         }
         if (ZaloIntent.isAvailable(context, intl)) {
@@ -69,7 +69,7 @@ object PhoneActions {
         Log.d(TAG, "Fallback")
         val opened = runCatching { context.startActivity(ZaloIntent.openInBrowser(intl)) }.isSuccess
         if (!opened) {
-            Toast.makeText(context, appStrings().actions.zaloAndBrowserUnavailable, Toast.LENGTH_SHORT).show()
+            CallActions.toast(context, appStrings().actions.zaloAndBrowserUnavailable, AppToastType.Error)
         }
     }
 }

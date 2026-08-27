@@ -29,7 +29,6 @@ enum class CallBlockRuleType(val storageKey: String, val priority: Int) {
     CARRIER("carrier", 6),
     GEOGRAPHIC("geographic", 6),
     SPECIAL("special", 1),
-    BRAND_NAME("brand_name", 1),
     /** Offline risk profile maintained by the app. This type only supports [CallBlockAction.BLOCK]. */
     SPAM_RISK("spam_risk", 7);
 
@@ -43,7 +42,6 @@ enum class CallBlockRuleType(val storageKey: String, val priority: Int) {
 
     /** Contact scope is meaningful only when the criterion has a stable telephone identity. */
     fun supportsScope(scope: CallBlockScope, rawValue: String? = null): Boolean = when (this) {
-        BRAND_NAME -> scope == CallBlockScope.ALL_VISIBLE_NUMBERS
         SPECIAL ->
             SpecialCallCondition.activeSelection(rawValue.orEmpty()) !in setOf(
                 SpecialCallCondition.PRIVATE_NUMBER,
@@ -227,133 +225,683 @@ data class SipCallerIdentity(
     val user: String = "",
     /** Populated only when [kind] is [SipCallerIdKind.PHONE_NUMBER]. */
     val phoneNumber: String? = null,
+    /** Sanitized URI without password, headers, or unrelated parameters. */
+    val canonicalUri: String? = null,
 ) {
     companion object {
         val UNKNOWN = SipCallerIdentity(SipCallerIdKind.UNKNOWN)
     }
 }
 
-/** Pure parser for the small portion of RFC 3261 needed by screening decisions. */
+private object UriComponentDecoder {
+    fun decode(value: String): String? {
+        if (!hasValidEscapes(value)) return null
+        return runCatching {
+            // URLDecoder otherwise converts a literal '+' into a space; in phone identities '+'
+            // is data, not HTML-form spacing.
+            URLDecoder.decode(value.replace("+", "%2B"), Charsets.UTF_8.name())
+                .takeUnless { '\uFFFD' in it }
+        }.getOrNull()
+    }
+
+    fun hasValidEscapes(value: String): Boolean {
+        var index = value.indexOf('%')
+        while (index >= 0) {
+            if (
+                index + 2 >= value.length ||
+                value[index + 1].digitToIntOrNull(16) == null ||
+                value[index + 2].digitToIntOrNull(16) == null
+            ) return false
+            index = value.indexOf('%', startIndex = index + 3)
+        }
+        return true
+    }
+}
+
+/** A selected URI representation plus whether its individual components still need decoding. */
+private data class UriAddressInput(
+    val value: String,
+    val componentsAreEncoded: Boolean,
+) {
+    fun decoded(component: String): String? =
+        if (componentsAreEncoded) UriComponentDecoder.decode(component) else component
+}
+
+/** Produces a deterministic, delimiter-safe SIP user component for history and backup. */
+private object SipUserComponentEncoder {
+    private const val HEX = "0123456789ABCDEF"
+
+    fun encode(value: String): String = buildString {
+        value.toByteArray(Charsets.UTF_8).forEach { byte ->
+            val unsigned = byte.toInt() and 0xff
+            val character = unsigned.toChar()
+            if (
+                unsigned < 0x80 &&
+                (character.isLetterOrDigit() || character in "-._~+")
+            ) {
+                append(character)
+            } else {
+                append('%')
+                append(HEX[unsigned ushr 4])
+                append(HEX[unsigned and 0x0f])
+            }
+        }
+    }
+}
+
+/**
+ * Pure parser for the small portion of RFC 3261 needed by screening decisions.
+ *
+ * Only literal delimiters in `encodedSchemeSpecificPart` are structural. Android's decoded opaque
+ * representation cannot distinguish `Uri.fromParts("sip", "alice@example.com", null)` from the
+ * malformed RFC URI `Uri.parse("sip:alice%40example.com")`; treating the decoded `@` as structure
+ * could therefore over-block. Ambiguous opaque forms deliberately fail open.
+ */
 object SipCallerIdentityParser {
     private const val MAX_URI_LENGTH = 512
     private const val MAX_USER_LENGTH = 128
 
-    fun parse(scheme: String?, schemeSpecificPart: String?): SipCallerIdentity {
-        if (scheme?.lowercase(Locale.ROOT) !in setOf("sip", "sips")) return SipCallerIdentity.UNKNOWN
-        val address = schemeSpecificPart.orEmpty().trim().removePrefix("//")
-        if (address.isEmpty() || address.length > MAX_URI_LENGTH) return SipCallerIdentity.UNKNOWN
-        val at = address.lastIndexOf('@')
-        if (at <= 0 || address.substring(0, at).contains('@')) return SipCallerIdentity.UNKNOWN
-        val hostAndParameters = address.substring(at + 1).substringBefore('?')
-        val host = hostAndParameters.substringBefore(';')
-        if (host.isBlank() || host.any { it.isWhitespace() || it.isISOControl() }) {
+    fun parse(
+        scheme: String?,
+        encodedSchemeSpecificPart: String?,
+        decodedSchemeSpecificPart: String? = null,
+    ): SipCallerIdentity {
+        val normalizedScheme = scheme?.lowercase(Locale.ROOT)
+        if (normalizedScheme !in setOf("sip", "sips")) return SipCallerIdentity.UNKNOWN
+        val input = UriAddressInput(encodedSchemeSpecificPart.orEmpty(), true)
+        val rawAddress = input.value
+        if (
+            rawAddress.isEmpty() ||
+            rawAddress.startsWith("//") ||
+            rawAddress.length > MAX_URI_LENGTH ||
+            rawAddress.any { it.isWhitespace() || it.isISOControl() } ||
+            (input.componentsAreEncoded && !UriComponentDecoder.hasValidEscapes(rawAddress))
+        ) return SipCallerIdentity.UNKNOWN
+
+        // `?` is legal in a SIP text user, so find the first structural '@' before looking for a
+        // header separator. More than one literal '@' is never accepted by this decision parser.
+        if ('#' in rawAddress) return SipCallerIdentity.UNKNOWN
+        val at = rawAddress.indexOf('@')
+        if (at <= 0) return SipCallerIdentity.UNKNOWN
+        val questionBeforeAt = rawAddress.indexOf('?').takeIf { it in 0 until at }
+        if (questionBeforeAt != null) {
+            val ambiguousHeaderValue = input.decoded(
+                rawAddress.substring(questionBeforeAt + 1, at)
+            ) ?: return SipCallerIdentity.UNKNOWN
+            // SIP headers require hname=hvalue. Without this guard, a host-only URI such as
+            // sip:example.com?to=alice%40example.net would mistake the '@' in the header value for
+            // user@host and a SIP_TEXT rule could over-block it. Ambiguity always fails open.
+            if ('=' in ambiguousHeaderValue) return SipCallerIdentity.UNKNOWN
+        }
+        // Headers do not participate in any supported decision. Reject them instead of accepting a
+        // partially validated URI and accidentally applying a broad SIP rule to malformed input.
+        if (rawAddress.indexOf('?', startIndex = at + 1) >= 0) return SipCallerIdentity.UNKNOWN
+        val address = rawAddress
+        if (address.indexOf('@', startIndex = at + 1) >= 0) return SipCallerIdentity.UNKNOWN
+
+        val hostAndParameters = address.substring(at + 1)
+        val canonicalHost = canonicalHostAndPort(hostAndParameters.substringBefore(';'))
+            ?: return SipCallerIdentity.UNKNOWN
+        val uriParameters = parseParameters(hostAndParameters.split(';').drop(1), input)
+            ?: return SipCallerIdentity.UNKNOWN
+        val userTypeParameters = uriParameters.filter { it.name == "user" }
+        if (userTypeParameters.size > 1) return SipCallerIdentity.UNKNOWN
+        val declaredUserType = userTypeParameters.singleOrNull()?.value
+            ?.lowercase(Locale.ROOT)
+            ?: if (userTypeParameters.isEmpty()) null else return SipCallerIdentity.UNKNOWN
+        // The app has explicit semantics only for RFC phone users and ordinary IP/text users.
+        if (declaredUserType != null && declaredUserType !in setOf("phone", "ip")) {
             return SipCallerIdentity.UNKNOWN
         }
 
-        // RFC 3261 userinfo can be user[:password]. Subscriber parameters such as postd can be
-        // attached to a phone user; neither password nor parameters belong in Contacts lookup.
-        val encodedUser = address.substring(0, at).substringBefore(':').substringBefore(';')
-        val user = percentDecode(encodedUser).trim()
+        // RFC 3261 text users may contain literal ';' and '?'. Split ';' as telephone-subscriber
+        // parameters only when user=phone, a global '+' subscriber, or phone-context proves that
+        // intent. Otherwise preserve the complete text user so distinct identities cannot collide.
+        val rawUserInfo = address.substring(0, at)
+        val rawUser = rawUserInfo.substringBefore(':')
+        if (input.componentsAreEncoded) {
+            if (!hasOnlyEncodedUserCharacters(rawUser)) return SipCallerIdentity.UNKNOWN
+            val passwordSeparator = rawUserInfo.indexOf(':')
+            if (
+                passwordSeparator >= 0 &&
+                !hasOnlyEncodedPasswordCharacters(rawUserInfo.substring(passwordSeparator + 1))
+            ) return SipCallerIdentity.UNKNOWN
+        }
+        val rawSubscriberSegments = rawUser.split(';')
+        val decodedSubscriber = input.decoded(rawSubscriberSegments.first())
+            ?: return SipCallerIdentity.UNKNOWN
+        val hasPhoneContextSyntax = rawSubscriberSegments.drop(1).any { parameter ->
+            parameter.substringBefore('=').equals("phone-context", ignoreCase = true)
+        }
+        val parseAsPhone = when (declaredUserType) {
+            "phone" -> true
+            "ip" -> false
+            else -> decodedSubscriber.startsWith('+') ||
+                (hasPhoneContextSyntax && isValidPhoneUser(decodedSubscriber))
+        }
+
+        val phoneContext: String?
+        val resolvedPhone: String?
+        val user = if (parseAsPhone) {
+            val subscriberParameters = parseParameters(rawSubscriberSegments.drop(1), input)
+                ?: return SipCallerIdentity.UNKNOWN
+            val contexts = subscriberParameters.filter { it.name == "phone-context" }
+            if (contexts.size > 1) return SipCallerIdentity.UNKNOWN
+            phoneContext = contexts.singleOrNull()?.value
+                ?: if (contexts.isEmpty()) null else return SipCallerIdentity.UNKNOWN
+            // RFC 3966 also permits a domain context, but it cannot be converted into a globally
+            // comparable PSTN identity for exact/contact rules. Fail open instead of treating it
+            // as SIP text and destructively catching a telephone subscriber with a text rule.
+            if (phoneContext != null && !isGlobalPhoneContext(phoneContext)) {
+                return SipCallerIdentity.UNKNOWN
+            }
+            if (decodedSubscriber.startsWith('+') && phoneContext != null) {
+                return SipCallerIdentity.UNKNOWN
+            }
+            resolvedPhone = when {
+                decodedSubscriber.startsWith('+') -> decodedSubscriber.takeIf(::isValidPhoneUser)
+                phoneContext != null && isValidPhoneUser(decodedSubscriber) ->
+                    (phoneContext + decodedSubscriber).takeIf(::isValidPhoneUser)
+                else -> null
+            }
+            decodedSubscriber
+        } else {
+            phoneContext = null
+            resolvedPhone = null
+            input.decoded(rawUser) ?: return SipCallerIdentity.UNKNOWN
+        }
         if (
             user.isEmpty() ||
             user.length > MAX_USER_LENGTH ||
             user.any { it.isWhitespace() || it.isISOControl() }
-        ) {
-            return SipCallerIdentity.UNKNOWN
-        }
-
-        val userParameters = hostAndParameters.split(';').drop(1)
-            .filter { parameter -> parameter.substringBefore('=').equals("user", ignoreCase = true) }
-        if (userParameters.size > 1) return SipCallerIdentity.UNKNOWN
-        val declaredUserType = userParameters.singleOrNull()?.split('=', limit = 2)
-            ?.getOrNull(1)
-            ?.takeIf(String::isNotEmpty)
-            ?.lowercase(Locale.ROOT)
-            ?: if (userParameters.isNotEmpty()) return SipCallerIdentity.UNKNOWN else null
-        val looksLikePhone = CallHistoryRuleCodec.isSelectableNumber(user)
-        return when {
-            declaredUserType == "phone" && looksLikePhone ->
-                SipCallerIdentity(SipCallerIdKind.PHONE_NUMBER, user = user, phoneNumber = user)
-            declaredUserType == "phone" -> SipCallerIdentity.UNKNOWN
-            declaredUserType != null -> SipCallerIdentity(SipCallerIdKind.TEXT_ID, user = user)
-            looksLikePhone -> SipCallerIdentity(SipCallerIdKind.PHONE_NUMBER, user = user, phoneNumber = user)
-            else -> SipCallerIdentity(SipCallerIdKind.TEXT_ID, user = user)
-        }
-    }
-
-    private fun percentDecode(value: String): String = runCatching {
-        // URLDecoder otherwise converts a literal '+' into a space; in SIP phone users '+' is data.
-        URLDecoder.decode(value.replace("+", "%2B"), Charsets.UTF_8.name())
-    }.getOrDefault(value)
-}
-
-/** Stable history/count key for either a telephone number or a supported SIP text identity. */
-object BlockedCallerIdentity {
-    fun key(rawIdentity: String): String? {
-        val raw = rawIdentity.trim()
-        if (CallHistoryRuleCodec.isSelectableNumber(raw)) return PhoneKey.of(raw).takeIf(String::isNotEmpty)
-        val separator = raw.indexOf(':')
-        if (separator <= 0) return null
-        val sipIdentity = SipCallerIdentityParser.parse(
-            scheme = raw.substring(0, separator),
-            schemeSpecificPart = raw.substring(separator + 1),
-        )
-        if (sipIdentity.kind != SipCallerIdKind.TEXT_ID) return null
-        val encoded = Base64.getUrlEncoder().withoutPadding()
-            .encodeToString(raw.toByteArray(Charsets.UTF_8))
-        return "uri:$encoded"
-    }
-}
-
-/** Versioned payload for an independent, exact and case-sensitive Brandname rule. */
-object BrandNameRuleCodec {
-    const val MAX_NAMES = 5
-    const val MAX_NAME_LENGTH = 64
-    private const val VERSION = "v1"
-
-    fun decode(raw: String): List<String> {
-        val parts = raw.split('|')
-        if (parts.firstOrNull() != VERSION) return emptyList()
-        return parts.drop(1)
-            .mapNotNull(::decodePart)
-            .map(String::trim)
-            .filter(::isAllowedName)
-            .distinct()
-    }
-
-    fun encode(names: List<String>): String {
-        // A Brandname rule is a set. Stable case-sensitive sorting prevents duplicates whose only
-        // difference is the order in which the user selected the same names.
-        val normalized = names.map(String::trim).filter(::isAllowedName).distinct().sorted()
-        return buildString {
-            append(VERSION)
-            normalized.forEach { name ->
-                append('|')
-                append(encodePart(name))
+        ) return SipCallerIdentity.UNKNOWN
+        if (parseAsPhone && resolvedPhone == null) return SipCallerIdentity.UNKNOWN
+        val canonicalUri = buildString {
+            append(normalizedScheme)
+            append(':')
+            append(SipUserComponentEncoder.encode(user))
+            phoneContext?.let {
+                append(";phone-context=")
+                append(SipUserComponentEncoder.encode(it))
+            }
+            append('@')
+            append(canonicalHost)
+            declaredUserType?.let {
+                append(";user=")
+                append(it)
             }
         }
+        return when {
+            declaredUserType == "phone" && resolvedPhone != null ->
+                SipCallerIdentity(
+                    SipCallerIdKind.PHONE_NUMBER,
+                    user = user,
+                    phoneNumber = resolvedPhone,
+                    canonicalUri = canonicalUri,
+                )
+            declaredUserType == "phone" -> SipCallerIdentity.UNKNOWN
+            declaredUserType == "ip" ->
+                SipCallerIdentity(SipCallerIdKind.TEXT_ID, user = user, canonicalUri = canonicalUri)
+            resolvedPhone != null -> SipCallerIdentity(
+                SipCallerIdKind.PHONE_NUMBER,
+                user = user,
+                phoneNumber = resolvedPhone,
+                canonicalUri = canonicalUri,
+            )
+            else -> SipCallerIdentity(SipCallerIdKind.TEXT_ID, user = user, canonicalUri = canonicalUri)
+        }
     }
 
-    fun canonical(raw: String): String = encode(decode(raw))
+    private data class UriParameter(val name: String, val value: String?)
 
-    fun isAllowedName(value: String): Boolean {
-        val name = value.trim()
-        return name.isNotEmpty() && name.length <= MAX_NAME_LENGTH && name.none(Char::isISOControl)
+    private fun parseParameters(
+        values: List<String>,
+        input: UriAddressInput,
+    ): List<UriParameter>? {
+        val result = ArrayList<UriParameter>(values.size)
+        for (raw in values) {
+            if (raw.isEmpty() || raw.any(Char::isISOControl)) return null
+            val pieces = raw.split('=', limit = 2)
+            val name = pieces.first().lowercase(Locale.ROOT)
+            if (
+                name.isEmpty() ||
+                name.any { char -> !(char.isAsciiLetterOrDigit() || char in "-_.!~*'()") }
+            ) return null
+            val rawValue = pieces.getOrNull(1)
+            if (
+                input.componentsAreEncoded &&
+                rawValue != null &&
+                !hasOnlyEncodedParameterValueCharacters(rawValue)
+            ) return null
+            val value = rawValue?.let(input::decoded)
+            if (
+                pieces.size == 2 &&
+                (value.isNullOrEmpty() || value.any { it.isWhitespace() || it.isISOControl() || it == '=' })
+            ) return null
+            result += UriParameter(name, value)
+        }
+        return result
     }
 
-    internal fun isValidPayload(raw: String): Boolean {
-        val names = decode(raw)
-        return names.isNotEmpty() && names.size <= MAX_NAMES && raw == encode(names)
+    private fun canonicalHostAndPort(value: String): String? {
+        if (
+            value.isBlank() ||
+            value.length > 255 ||
+            value.any { it.isWhitespace() || it.isISOControl() || it in "/@?#%" }
+        ) return null
+
+        if (value.startsWith('[')) {
+            val closingBracket = value.indexOf(']')
+            if (closingBracket <= 1) return null
+            val literal = value.substring(1, closingBracket)
+            // This path runs inside Telecom's response deadline. Validation must remain purely
+            // lexical: platform address resolution can fall through to DNS for an invalid literal.
+            val canonicalLiteral = canonicalIpv6Literal(literal) ?: return null
+            val suffix = value.substring(closingBracket + 1)
+            if (suffix.isNotEmpty() && !(suffix.startsWith(':') && isValidPort(suffix.drop(1)))) {
+                return null
+            }
+            return "[$canonicalLiteral]$suffix"
+        }
+
+        if ('[' in value || ']' in value || value.count { it == ':' } > 1) return null
+        val hasPort = ':' in value
+        val rawHost = if (hasPort) value.substringBeforeLast(':') else value
+        val port = if (hasPort) value.substringAfterLast(':') else null
+        if (port != null && !isValidPort(port)) return null
+        val host = rawHost.removeSuffix(".")
+        if (host.isEmpty() || host.length > 253) return null
+
+        val validHost = if (host.all { it in '0'..'9' || it == '.' }) {
+            val octets = host.split('.')
+            octets.size == 4 && octets.all { octet ->
+                octet.isNotEmpty() &&
+                    octet.all { it in '0'..'9' } &&
+                    (octet == "0" || !octet.startsWith('0')) &&
+                    octet.toIntOrNull() in 0..255
+            }
+        } else {
+            host.split('.').all { label ->
+                label.length in 1..63 &&
+                    label.first().isAsciiLetterOrDigit() &&
+                    label.last().isAsciiLetterOrDigit() &&
+                    label.all { it.isAsciiLetterOrDigit() || it == '-' }
+            }
+        }
+        if (!validHost) return null
+        return buildString {
+            append(host.lowercase(Locale.ROOT))
+            port?.let { append(':').append(it) }
+        }
     }
 
-    private fun encodePart(value: String): String =
-        Base64.getUrlEncoder().withoutPadding().encodeToString(value.toByteArray(Charsets.UTF_8))
+    private fun Char.isAsciiLetterOrDigit(): Boolean =
+        this in 'a'..'z' || this in 'A'..'Z' || this in '0'..'9'
 
-    private fun decodePart(value: String): String? = runCatching {
-        Base64.getUrlDecoder().decode(value).toString(Charsets.UTF_8)
-    }.getOrNull()
+    private fun hasOnlyEncodedUserCharacters(value: String): Boolean =
+        hasOnlyEncodedCharacters(value) { character ->
+            character.isAsciiLetterOrDigit() || character in "-_.!~*'()&=+$,;?/"
+        }
+
+    private fun hasOnlyEncodedPasswordCharacters(value: String): Boolean =
+        hasOnlyEncodedCharacters(value) { character ->
+            character.isAsciiLetterOrDigit() || character in "-_.!~*'()&=+$,"
+        }
+
+    private fun hasOnlyEncodedParameterValueCharacters(value: String): Boolean =
+        hasOnlyEncodedCharacters(value) { character ->
+            character.isAsciiLetterOrDigit() || character in "-_.!~*'()[]/:&+$"
+        }
+
+    private inline fun hasOnlyEncodedCharacters(
+        value: String,
+        isAllowedLiteral: (Char) -> Boolean,
+    ): Boolean {
+        var index = 0
+        while (index < value.length) {
+            if (value[index] == '%') {
+                // Global URI validation has already proved that every escape has two hex digits.
+                index += 3
+            } else {
+                if (!isAllowedLiteral(value[index])) return false
+                index++
+            }
+        }
+        return true
+    }
+
+    private fun isValidPort(value: String): Boolean =
+        value.isNotEmpty() &&
+            value.all { it in '0'..'9' } &&
+            value.toIntOrNull()?.let { it in 0..65535 } == true
+
+    /** Numeric-only IPv6 parsing plus RFC 5952-style stable compression for history keys. */
+    private fun canonicalIpv6Literal(value: String): String? {
+        if (
+            value.isEmpty() ||
+            value.any { it !in "0123456789abcdefABCDEF:." } ||
+            value.windowed(2).count { it == "::" } > 1
+        ) return null
+        val compressed = "::" in value
+        val sides = if (compressed) value.split("::", limit = 2) else listOf(value)
+
+        fun parseGroups(side: String, allowIpv4Tail: Boolean): List<Int>? {
+            if (side.isEmpty()) return emptyList()
+            val groups = side.split(':')
+            if (groups.any(String::isEmpty)) return null
+            val parsed = ArrayList<Int>(groups.size + 1)
+            groups.forEachIndexed { index, group ->
+                if ('.' in group) {
+                    if (
+                        !allowIpv4Tail ||
+                        index != groups.lastIndex ||
+                        !isValidIpv4Address(group)
+                    ) return null
+                    val octets = group.split('.').map(String::toInt)
+                    parsed += (octets[0] shl 8) or octets[1]
+                    parsed += (octets[2] shl 8) or octets[3]
+                } else {
+                    if (group.length !in 1..4 || group.any { it.digitToIntOrNull(16) == null }) {
+                        return null
+                    }
+                    parsed += group.toInt(16)
+                }
+            }
+            return parsed
+        }
+
+        val groups = if (compressed) {
+            val left = parseGroups(sides[0], allowIpv4Tail = false) ?: return null
+            val right = parseGroups(sides[1], allowIpv4Tail = true) ?: return null
+            if (left.size + right.size >= 8) return null
+            left + List(8 - left.size - right.size) { 0 } + right
+        } else {
+            parseGroups(sides.single(), allowIpv4Tail = true)
+                ?.takeIf { it.size == 8 }
+                ?: return null
+        }
+
+        var bestStart = -1
+        var bestLength = 0
+        var index = 0
+        while (index < groups.size) {
+            if (groups[index] != 0) {
+                index++
+                continue
+            }
+            val start = index
+            while (index < groups.size && groups[index] == 0) index++
+            val length = index - start
+            if (length >= 2 && length > bestLength) {
+                bestStart = start
+                bestLength = length
+            }
+        }
+        fun render(values: List<Int>): String = values.joinToString(":") { it.toString(16) }
+        if (bestStart < 0) return render(groups)
+        val left = render(groups.take(bestStart))
+        val right = render(groups.drop(bestStart + bestLength))
+        return when {
+            left.isEmpty() && right.isEmpty() -> "::"
+            left.isEmpty() -> "::$right"
+            right.isEmpty() -> "$left::"
+            else -> "$left::$right"
+        }
+    }
+
+    private fun isValidIpv4Address(value: String): Boolean {
+        val octets = value.split('.')
+        return octets.size == 4 && octets.all { octet ->
+            octet.isNotEmpty() &&
+                octet.all { it in '0'..'9' } &&
+                (octet == "0" || !octet.startsWith('0')) &&
+                octet.toIntOrNull() in 0..255
+        }
+    }
+
+    private fun isValidPhoneUser(value: String): Boolean {
+        val plusIndexes = value.indices.filter { value[it] == '+' }
+        return value.any { it in '0'..'9' } &&
+            value.all { it in '0'..'9' || it in "+-()." } &&
+            plusIndexes.size <= 1 &&
+            (plusIndexes.isEmpty() || plusIndexes.single() == 0)
+    }
+
+    private fun isGlobalPhoneContext(value: String): Boolean =
+        value.startsWith('+') && value.length > 1 && value.drop(1).all { it in '0'..'9' }
 }
 
+private data class TelCallerIdentity(
+    val subscriber: String,
+    val telephoneNumber: String?,
+) {
+    companion object {
+        val UNKNOWN = TelCallerIdentity("", null)
+    }
+}
+
+/** Extracts only the subscriber identity from RFC 3966; extension/isub never enter number rules. */
+private object TelCallerIdentityParser {
+    private const val MAX_URI_LENGTH = 512
+
+    fun parse(
+        encodedSchemeSpecificPart: String?,
+        decodedSchemeSpecificPart: String? = null,
+    ): TelCallerIdentity {
+        val encoded = encodedSchemeSpecificPart.orEmpty()
+        // As with SIP, decoded opaque data is ambiguous. Only encoded-form literal delimiters are
+        // trusted as RFC 3966 structure; percent escapes inside components are decoded exactly once.
+        val input = UriAddressInput(encoded, true)
+        val address = input.value
+        if (
+            address.isEmpty() ||
+            address.startsWith("//") ||
+            address.length > MAX_URI_LENGTH ||
+            '?' in address ||
+            '#' in address ||
+            address.any { it.isWhitespace() || it.isISOControl() } ||
+            (input.componentsAreEncoded && !UriComponentDecoder.hasValidEscapes(address))
+        ) return TelCallerIdentity.UNKNOWN
+
+        val segments = address.split(';')
+        val subscriber = input.decoded(segments.first())
+            ?.takeIf(String::isNotEmpty)
+            ?: return TelCallerIdentity.UNKNOWN
+        val parameters = LinkedHashMap<String, String>()
+        for (rawParameter in segments.drop(1)) {
+            val pieces = rawParameter.split('=', limit = 2)
+            val name = pieces.firstOrNull()?.lowercase(Locale.ROOT).orEmpty()
+            val rawValue = pieces.getOrNull(1).orEmpty()
+            val value = rawValue.takeIf(::hasOnlyEncodedParameterCharacters)
+                ?.let(input::decoded)
+                .orEmpty()
+            if (
+                name.isEmpty() ||
+                value.isEmpty() ||
+                name.any { !(it in 'a'..'z' || it in '0'..'9' || it == '-') } ||
+                value.any { it.isWhitespace() || it.isISOControl() } ||
+                parameters.put(name, value) != null
+            ) return TelCallerIdentity.UNKNOWN
+        }
+
+        // RFC 3966 requires clients to reject unknown mandatory extensions and forbids ext + isub.
+        if (parameters.keys.any { it.startsWith("m-") }) return TelCallerIdentity.UNKNOWN
+        if (parameters.containsKey("ext") && parameters.containsKey("isub")) {
+            return TelCallerIdentity.UNKNOWN
+        }
+        parameters["ext"]?.let { extension ->
+            if (extension.none { it in '0'..'9' } || extension.any { it !in "0123456789-()." }) {
+                return TelCallerIdentity.UNKNOWN
+            }
+        }
+
+        val phoneContext = parameters["phone-context"]
+        if (subscriber.startsWith('+') && phoneContext != null) return TelCallerIdentity.UNKNOWN
+        val candidate = when {
+            subscriber.startsWith('+') -> subscriber
+            phoneContext == null -> subscriber
+            isGlobalPhoneContext(phoneContext) ->
+                phoneContext + subscriber
+            // A domain phone-context cannot be mapped safely to the app's PSTN number rules.
+            else -> return TelCallerIdentity(subscriber, null)
+        }
+        return TelCallerIdentity(
+            subscriber = subscriber,
+            telephoneNumber = candidate.takeIf(::isValidTelephoneNumber),
+        )
+    }
+
+    private fun isValidTelephoneNumber(value: String): Boolean {
+        val plusIndexes = value.indices.filter { value[it] == '+' }
+        return value.any { it in '0'..'9' } &&
+            value.all { it in '0'..'9' || it in "+-()." } &&
+            plusIndexes.size <= 1 &&
+            (plusIndexes.isEmpty() || plusIndexes.single() == 0)
+    }
+
+    private fun hasOnlyEncodedParameterCharacters(value: String): Boolean {
+        var index = 0
+        while (index < value.length) {
+            val character = value[index]
+            if (character == '%') {
+                if (
+                    index + 2 >= value.length ||
+                    value[index + 1].digitToIntOrNull(16) == null ||
+                    value[index + 2].digitToIntOrNull(16) == null
+                ) return false
+                index += 3
+            } else {
+                if (
+                    !(character in 'a'..'z' || character in 'A'..'Z' ||
+                        character in '0'..'9' || character in "-_.!~*'()[]/:&+$,=")
+                ) return false
+                index++
+            }
+        }
+        return true
+    }
+
+    private fun isGlobalPhoneContext(value: String): Boolean =
+        value.startsWith('+') && value.length > 1 && value.drop(1).all { it in '0'..'9' }
+}
+
+/** Android-free adapter for the telephone/SIP address supplied to the screening callback. */
+data class IncomingCallAddress(
+    val rawAddress: String,
+    val screeningAddress: String,
+    val telephoneNumber: String?,
+    val sipCallerIdentity: SipCallerIdentity,
+    /** Address shape only; a non-tel scheme is not proof that the transport itself is VoIP. */
+    val isNonTelHandle: Boolean,
+    val historyIdentity: String,
+)
+
+object IncomingCallAddressParser {
+    private const val TEL_SCHEME = "tel"
+
+    fun parse(
+        scheme: String?,
+        encodedSchemeSpecificPart: String?,
+        decodedSchemeSpecificPart: String? = null,
+        encodedFragment: String? = null,
+    ): IncomingCallAddress {
+        val normalizedScheme = scheme?.lowercase(Locale.ROOT)?.takeIf(String::isNotEmpty)
+        val rawAddress = encodedSchemeSpecificPart.orEmpty()
+        val hasFragment = encodedFragment != null
+        val sipIdentity = if (hasFragment) SipCallerIdentity.UNKNOWN else SipCallerIdentityParser.parse(
+            normalizedScheme,
+            rawAddress,
+            decodedSchemeSpecificPart,
+        )
+        val telIdentity = if (!hasFragment && normalizedScheme == TEL_SCHEME) {
+            TelCallerIdentityParser.parse(rawAddress, decodedSchemeSpecificPart)
+        } else {
+            TelCallerIdentity.UNKNOWN
+        }
+        val telephoneNumber = when {
+            sipIdentity.kind == SipCallerIdKind.PHONE_NUMBER -> sipIdentity.phoneNumber
+            telIdentity.telephoneNumber != null -> telIdentity.telephoneNumber
+            else -> null
+        }
+        // Never hand a rejected/malformed handle back to the generic number engine. It accepts
+        // contact-style dial strings by design and would otherwise undo this parser's fail-open
+        // decision (for example a tel URI whose fragment was stripped from the SSP by Android).
+        val screeningAddress = telephoneNumber.orEmpty()
+        val historyIdentity = when {
+            telephoneNumber != null -> telephoneNumber
+            sipIdentity.kind == SipCallerIdKind.TEXT_ID -> sipIdentity.canonicalUri.orEmpty()
+            else -> rawAddress
+        }
+        return IncomingCallAddress(
+            rawAddress = rawAddress,
+            screeningAddress = screeningAddress,
+            telephoneNumber = telephoneNumber,
+            sipCallerIdentity = sipIdentity,
+            isNonTelHandle = normalizedScheme != null && normalizedScheme != TEL_SCHEME,
+            historyIdentity = historyIdentity,
+        )
+    }
+}
+
+data class CanonicalBlockedCallerIdentity(
+    /** Safe value persisted/displayed/exported; never contains SIP password or headers. */
+    val historyIdentity: String,
+    val key: String,
+)
+
+/** Stable safe history identity + count key for telephone or SIP text callers. */
+object BlockedCallerIdentity {
+    fun canonicalize(rawIdentity: String): CanonicalBlockedCallerIdentity? {
+        val raw = rawIdentity.trim()
+        if (CallHistoryRuleCodec.isSelectableNumber(raw)) {
+            val key = PhoneKey.of(raw).takeIf(String::isNotEmpty) ?: return null
+            return CanonicalBlockedCallerIdentity(raw, key)
+        }
+        val separator = raw.indexOf(':')
+        if (separator <= 0) return null
+        val sanitizedSipSpecificPart = raw.substring(separator + 1).let { value ->
+            val at = value.indexOf('@')
+            val header = if (at > 0) value.indexOf('?', startIndex = at + 1) else -1
+            if (header > at) value.substring(0, header) else value
+        }
+        val sipIdentity = SipCallerIdentityParser.parse(
+            scheme = raw.substring(0, separator),
+            encodedSchemeSpecificPart = sanitizedSipSpecificPart,
+        )
+        return when (sipIdentity.kind) {
+            SipCallerIdKind.PHONE_NUMBER -> sipIdentity.phoneNumber?.let(::canonicalize)
+            SipCallerIdKind.TEXT_ID -> sipIdentity.canonicalUri?.let {
+                CanonicalBlockedCallerIdentity(it, "uri:${encodeIdentity(it)}")
+            }
+            SipCallerIdKind.UNKNOWN -> null
+        }
+    }
+
+    fun key(rawIdentity: String): String? = canonicalize(rawIdentity)?.key
+
+    /** Redacts a rejected legacy SIP row using a database-owned token, never caller secrets. */
+    fun redactLegacySip(
+        rawIdentity: String,
+        opaqueToken: String,
+    ): CanonicalBlockedCallerIdentity? {
+        val raw = rawIdentity.trim()
+        val separator = raw.indexOf(':')
+        if (separator <= 0) return null
+        val scheme = raw.substring(0, separator).lowercase(Locale.ROOT)
+        if (scheme !in setOf("sip", "sips")) return null
+        val token = opaqueToken.takeIf {
+            it.isNotEmpty() && it.length <= 64 && it.all { char ->
+                char in 'a'..'z' || char in 'A'..'Z' || char in '0'..'9' || char == '-'
+            }
+        } ?: return null
+        val safeIdentity = "$scheme:redacted-$token@invalid"
+        return CanonicalBlockedCallerIdentity(safeIdentity, "uri:${encodeIdentity(safeIdentity)}")
+    }
+
+    private fun encodeIdentity(raw: String): String = Base64.getUrlEncoder().withoutPadding()
+        .encodeToString(raw.toByteArray(Charsets.UTF_8))
+
+}
 /** Stable reason recorded when the app-maintained spam-risk profile matches a call. */
 enum class SpamRiskReasonKind(val storageKey: String) {
     PREFIX("prefix"),
@@ -619,8 +1167,6 @@ data class CallScreeningContext(
     val contactStatus: ContactLookupStatus = ContactLookupStatus.UNKNOWN,
     val isPrivateNumber: Boolean = false,
     val isVoip: Boolean = false,
-    /** Caller-ID label, never a Contacts display name. Android may leave it null. */
-    val callerDisplayName: String? = null,
     val sipCallerIdentity: SipCallerIdentity = SipCallerIdentity.UNKNOWN,
     val callerNumberVerificationStatus: CallerNumberVerificationStatus =
         CallerNumberVerificationStatus.UNKNOWN,
@@ -891,7 +1437,6 @@ object CallBlockRuleMatcher {
         CallBlockRuleType.GEOGRAPHIC ->
             GeographicBlockOption.encode(GeographicBlockOption.decode(rawValue))
         CallBlockRuleType.SPECIAL -> SpecialCallCondition.canonical(rawValue)
-        CallBlockRuleType.BRAND_NAME -> BrandNameRuleCodec.canonical(rawValue)
         CallBlockRuleType.SPAM_RISK -> SPAM_RISK_PROFILE
     }
 
@@ -901,7 +1446,6 @@ object CallBlockRuleMatcher {
         CallBlockRuleType.GEOGRAPHIC ->
             GeographicBlockOption.encode(GeographicBlockOption.decode(rawValue))
         CallBlockRuleType.SPECIAL -> SpecialCallCondition.canonical(rawValue)
-        CallBlockRuleType.BRAND_NAME -> BrandNameRuleCodec.canonical(rawValue)
         CallBlockRuleType.CONTACTS -> ContactRuleCodec.encode(ContactRuleCodec.decode(rawValue))
         CallBlockRuleType.CALL_HISTORY -> CallHistoryRuleCodec.encode(CallHistoryRuleCodec.decode(rawValue))
         CallBlockRuleType.SPAM_RISK -> SPAM_RISK_PROFILE
@@ -935,7 +1479,6 @@ object CallBlockRuleMatcher {
             GeographicBlockOption.isValidPayload(rawValue) && GeographicBlockOption.decode(rawValue).isNotEmpty()
         CallBlockRuleType.SPECIAL ->
             SpecialCallCondition.isValidPayload(rawValue) && SpecialCallCondition.decode(rawValue).isNotEmpty()
-        CallBlockRuleType.BRAND_NAME -> BrandNameRuleCodec.isValidPayload(rawValue)
         CallBlockRuleType.SPAM_RISK -> rawValue.trim() == SPAM_RISK_PROFILE
     }
 
@@ -956,10 +1499,6 @@ object CallBlockRuleMatcher {
                 -> false
             }
         }
-        if (rule.type == CallBlockRuleType.BRAND_NAME) {
-            val names = BrandNameRuleCodec.decode(rule.matchValue)
-            return context.callerDisplayName?.trim()?.let(names::contains) == true
-        }
         // A SIP phone user is deliberately promoted to the existing phone-number engine. Text or
         // malformed non-tel identities must never leak embedded digits into number rules.
         val matchNumber = context.sipCallerIdentity.phoneNumber ?: context.number
@@ -967,6 +1506,7 @@ object CallBlockRuleMatcher {
             context.isPrivateNumber ||
             (context.isVoip && context.sipCallerIdentity.kind != SipCallerIdKind.PHONE_NUMBER)
         ) return false
+        if (!CallHistoryRuleCodec.isSelectableNumber(matchNumber)) return false
         if (rule.type == CallBlockRuleType.SPAM_RISK) return spamRiskReason(context) != null
         // ALL-visible rules are independent from provider state. Contact-scoped rules require a
         // positive/negative lookup and therefore fail open when permission/provider is unavailable.
@@ -989,7 +1529,6 @@ object CallBlockRuleMatcher {
             CallBlockRuleType.CARRIER -> Carrier.of(number) == rule.matchValue
             CallBlockRuleType.GEOGRAPHIC -> matchesGeographic(rule.matchValue, number)
             CallBlockRuleType.SPECIAL -> false
-            CallBlockRuleType.BRAND_NAME -> false
             CallBlockRuleType.SPAM_RISK -> spamRiskNumberReason(number) != null
         }
     }
@@ -1041,7 +1580,11 @@ object CallBlockRuleMatcher {
      * whose three/four-digit prefix is absent from the app's current [Carrier] table.
      */
     fun spamRiskReason(context: CallScreeningContext): SpamRiskReason? {
-        if (context.isPrivateNumber || context.isVoip) return null
+        if (
+            context.isPrivateNumber ||
+            context.isVoip ||
+            !CallHistoryRuleCodec.isSelectableNumber(context.number)
+        ) return null
         if (context.callerNumberVerificationStatus == CallerNumberVerificationStatus.FAILED) {
             return SpamRiskReason(SpamRiskReasonKind.VERIFICATION_FAILED)
         }
@@ -1141,10 +1684,7 @@ internal fun CallBlockRuleEntity.toModel(): CallBlockRule? =
         if (!parsedType.supportsAction(parsedAction)) return null
         val parsedScope = CallBlockScope.fromStorage(scope) ?: return null
         if (!parsedType.supportsScope(parsedScope, rawValue)) return null
-        if (
-            parsedType in setOf(CallBlockRuleType.SPECIAL, CallBlockRuleType.BRAND_NAME) &&
-            !CallBlockRuleMatcher.isValid(parsedType, rawValue)
-        ) {
+        if (parsedType == CallBlockRuleType.SPECIAL && !CallBlockRuleMatcher.isValid(parsedType, rawValue)) {
             return null
         }
         CallBlockRule(

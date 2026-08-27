@@ -5,8 +5,8 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.ContactsContract
 import android.util.Log
-import android.widget.Toast
 import com.antimobile.callhs.i18n.appStrings
+import com.antimobile.callhs.ui.components.AppToastType
 
 /**
  * Điều phối thao tác với DANH BẠ hệ thống — chỉ MỞ ứng dụng Danh bạ mặc định qua Intent
@@ -26,7 +26,7 @@ object ContactActions {
     fun addToContacts(context: Context, number: String) {
         val clean = number.trim()
         if (clean.isEmpty() || clean.startsWith("-")) {
-            Toast.makeText(context, appStrings().actions.invalidPhone, Toast.LENGTH_SHORT).show()
+            CallActions.toast(context, appStrings().actions.invalidPhone, AppToastType.Error)
             return
         }
         val intent = Intent(Intent.ACTION_INSERT).apply {
@@ -35,7 +35,7 @@ object ContactActions {
         }
         Log.d(TAG, "Add to contacts: $clean")
         val opened = runCatching { context.startActivity(intent) }.isSuccess
-        if (!opened) Toast.makeText(context, appStrings().actions.contactsAppOpenFailed, Toast.LENGTH_SHORT).show()
+        if (!opened) CallActions.toast(context, appStrings().actions.contactsAppOpenFailed, AppToastType.Error)
     }
 
     /**
@@ -52,20 +52,20 @@ object ContactActions {
         }
         Log.d(TAG, "Add contact from QR: name=$name phone=$phone")
         val opened = runCatching { context.startActivity(intent) }.isSuccess
-        if (!opened) Toast.makeText(context, appStrings().actions.contactsAppOpenFailed, Toast.LENGTH_SHORT).show()
+        if (!opened) CallActions.toast(context, appStrings().actions.contactsAppOpenFailed, AppToastType.Error)
     }
 
     /** Mở & xem liên hệ đã lưu theo [lookupUri] (chuỗi URI lấy từ PhoneLookup) trong Danh bạ. */
     fun viewContact(context: Context, lookupUri: String) {
         val uri = runCatching { Uri.parse(lookupUri) }.getOrNull()
         if (uri == null) {
-            Toast.makeText(context, appStrings().actions.contactOpenFailed, Toast.LENGTH_SHORT).show()
+            CallActions.toast(context, appStrings().actions.contactOpenFailed, AppToastType.Error)
             return
         }
         val intent = Intent(Intent.ACTION_VIEW, uri)
         Log.d(TAG, "View contact: $lookupUri")
         val opened = runCatching { context.startActivity(intent) }.isSuccess
-        if (!opened) Toast.makeText(context, appStrings().actions.contactsAppOpenFailed, Toast.LENGTH_SHORT).show()
+        if (!opened) CallActions.toast(context, appStrings().actions.contactsAppOpenFailed, AppToastType.Error)
     }
 
     /** Mở màn TẠO liên hệ mới TRỐNG (không điền sẵn trường nào) của Danh bạ mặc định. */
@@ -75,14 +75,14 @@ object ContactActions {
         }
         Log.d(TAG, "Create new contact")
         val opened = runCatching { context.startActivity(intent) }.isSuccess
-        if (!opened) Toast.makeText(context, appStrings().actions.contactsAppOpenFailed, Toast.LENGTH_SHORT).show()
+        if (!opened) CallActions.toast(context, appStrings().actions.contactsAppOpenFailed, AppToastType.Error)
     }
 
     /** Mở màn SỬA liên hệ (ACTION_EDIT) theo [lookupUri] trong Danh bạ mặc định. */
     fun editContact(context: Context, lookupUri: String) {
         val uri = runCatching { Uri.parse(lookupUri) }.getOrNull()
         if (uri == null) {
-            Toast.makeText(context, appStrings().actions.contactOpenFailed, Toast.LENGTH_SHORT).show()
+            CallActions.toast(context, appStrings().actions.contactOpenFailed, AppToastType.Error)
             return
         }
         val intent = Intent(Intent.ACTION_EDIT).apply {
@@ -92,7 +92,7 @@ object ContactActions {
         }
         Log.d(TAG, "Edit contact: $lookupUri")
         val opened = runCatching { context.startActivity(intent) }.isSuccess
-        if (!opened) Toast.makeText(context, appStrings().actions.contactsAppOpenFailed, Toast.LENGTH_SHORT).show()
+        if (!opened) CallActions.toast(context, appStrings().actions.contactsAppOpenFailed, AppToastType.Error)
     }
 
     /**
@@ -103,13 +103,13 @@ object ContactActions {
     fun deleteContact(context: Context, lookupUri: String) {
         val uri = runCatching { Uri.parse(lookupUri) }.getOrNull()
         if (uri == null) {
-            Toast.makeText(context, appStrings().actions.contactOpenFailed, Toast.LENGTH_SHORT).show()
+            CallActions.toast(context, appStrings().actions.contactOpenFailed, AppToastType.Error)
             return
         }
         Log.d(TAG, "Delete contact (route to Contacts app): $lookupUri")
         val deleted = runCatching { context.startActivity(Intent(Intent.ACTION_DELETE, uri)) }.isSuccess
         if (deleted) return
         val viewed = runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, uri)) }.isSuccess
-        if (!viewed) Toast.makeText(context, appStrings().actions.contactsAppOpenFailed, Toast.LENGTH_SHORT).show()
+        if (!viewed) CallActions.toast(context, appStrings().actions.contactsAppOpenFailed, AppToastType.Error)
     }
 }

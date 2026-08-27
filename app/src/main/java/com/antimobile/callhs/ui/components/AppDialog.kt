@@ -120,6 +120,7 @@ fun AppDialog(
                     }
                 }
             }
+            AppToastHost(modifier = Modifier.matchParentSize())
         }
         }
     }

@@ -12,7 +12,6 @@ import com.antimobile.callhs.data.backup.BackupBlockRule
 import com.antimobile.callhs.data.backup.BackupBlockedCall
 import com.antimobile.callhs.data.backup.BackupNumberEntry
 import com.antimobile.callhs.data.backup.MergeMode
-import com.antimobile.callhs.data.blocking.BrandNameRuleCodec
 import com.antimobile.callhs.data.blocking.CallBlockAction
 import com.antimobile.callhs.data.blocking.CallBlockMethod
 import com.antimobile.callhs.data.blocking.CallBlockRepository
@@ -60,7 +59,7 @@ class UiDemoSeedInstrumentedTest {
 
         val repository = CallBlockRepository(context)
         assertEquals(75, repository.observeNumberEntries().first().size)
-        assertEquals(9, repository.observeRules().first().size)
+        assertEquals(8, repository.observeRules().first().size)
         assertEquals(177, repository.observeHistory().first().size)
     }
 
@@ -279,15 +278,9 @@ class UiDemoSeedInstrumentedTest {
                 now,
             ),
             demoRule(
-                CallBlockRuleType.BRAND_NAME,
-                BrandNameRuleCodec.encode(listOf("UIBANK", "UITEST")),
-                7,
-                now,
-            ),
-            demoRule(
                 CallBlockRuleType.SPECIAL,
                 SpecialCallCondition.encode(setOf(SpecialCallCondition.PRIVATE_NUMBER)),
-                8,
+                7,
                 now,
             ),
         )

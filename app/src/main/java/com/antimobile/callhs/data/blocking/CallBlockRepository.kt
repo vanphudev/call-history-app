@@ -19,9 +19,11 @@ import com.antimobile.callhs.data.local.AppDatabase
 import com.antimobile.callhs.util.PhoneKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.util.UUID
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Future
 import java.util.concurrent.RejectedExecutionException
@@ -30,6 +32,29 @@ import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicInteger
+
+private data class RuleRestoreSignature(
+    val action: String,
+    val type: String,
+    val matchValue: String,
+    val scope: String,
+)
+
+private data class RestorableRule(
+    val backup: BackupBlockRule,
+    val type: CallBlockRuleType,
+    val action: CallBlockAction,
+    val scope: CallBlockScope,
+    val canonicalRaw: String,
+    val canonicalMatch: String,
+) {
+    val signature = RuleRestoreSignature(
+        action.storageKey,
+        type.storageKey,
+        canonicalMatch,
+        scope.storageKey,
+    )
+}
 
 /**
  * Cổng duy nhất tới quy tắc chặn/lịch sử chặn app-owned.
@@ -54,30 +79,47 @@ class CallBlockRepository(context: Context) {
             .filter { action == null || it.action == action }
     }
 
-    fun observeHistory(): Flow<List<BlockedCallHistory>> = dao.observeHistory().map { rows ->
-        rows.mapNotNull { row ->
-            CallBlockHistoryReasonCodec.display(row.ruleType, row.ruleValue)?.let { reason ->
-                BlockedCallHistory(
-                    id = row.id,
-                    rawNumber = row.rawNumber,
-                    phoneKey = row.phoneKey,
-                    blockedAt = row.blockedAt,
-                    ruleType = reason.ruleType,
-                    ruleValue = reason.ruleValue,
-                    consecutiveUnanswered = row.consecutiveUnanswered,
-                    blockedCountForNumber = row.blockedCountForNumber,
-                    historyReasonType = row.ruleType,
-                    historyReasonValue = row.ruleValue,
-                    ruleScope = CallBlockScope.fromStorage(row.ruleScope)
-                        ?: CallBlockScope.ALL_VISIBLE_NUMBERS,
-                )
+    fun observeHistory(): Flow<List<BlockedCallHistory>> = dao.observeHistory()
+        .onStart { sanitizeLegacyHistoryIdentitiesOnce() }
+        .map { rows ->
+            rows.mapNotNull { row ->
+                val identity = BlockedCallerIdentity.canonicalize(row.rawNumber)
+                    ?: return@mapNotNull null
+                CallBlockHistoryReasonCodec.display(row.ruleType, row.ruleValue)?.let { reason ->
+                    BlockedCallHistory(
+                        id = row.id,
+                        rawNumber = identity.historyIdentity,
+                        phoneKey = identity.key,
+                        blockedAt = row.blockedAt,
+                        ruleType = reason.ruleType,
+                        ruleValue = reason.ruleValue,
+                        consecutiveUnanswered = row.consecutiveUnanswered,
+                        blockedCountForNumber = row.blockedCountForNumber,
+                        historyReasonType = row.ruleType,
+                        historyReasonValue = row.ruleValue,
+                        ruleScope = CallBlockScope.fromStorage(row.ruleScope)
+                            ?: CallBlockScope.ALL_VISIBLE_NUMBERS,
+                    )
+                }
             }
         }
-    }
 
     suspend fun getRule(id: Long): CallBlockRule? = dao.getRule(id)?.toModel()
 
     suspend fun getNumberEntry(id: Long): CallBlockNumberEntry? = dao.getNumberEntry(id)?.toModel()
+
+    /**
+     * Tra cứu chỉ-đọc cho tính năng cuộc gọi đi. Đây KHÔNG phải engine chặn cuộc gọi đến: trạng thái
+     * bật/tắt của bộ chặn và các quy tắc nâng cao không tham gia. Chỉ số chính xác đang bật trong hai
+     * danh sách được xét; nếu dữ liệu cũ hỏng chứa cả hai phía thì ALLOW vẫn thắng như engine chính.
+     */
+    suspend fun findEnabledExactNumberEntry(number: String): CallBlockNumberEntry? {
+        val phoneKey = PhoneKey.of(number)
+        if (phoneKey.isBlank()) return null
+        val entries = dao.getEnabledNumberEntries(phoneKey).mapNotNull { it.toModel() }
+        return entries.firstOrNull { it.action == CallBlockAction.ALLOW }
+            ?: entries.firstOrNull { it.action == CallBlockAction.BLOCK }
+    }
 
     suspend fun ruleCount(): Int = dao.ruleCount()
 
@@ -282,10 +324,19 @@ class CallBlockRepository(context: Context) {
         if (!type.supportsScope(scope, cleaned)) return SaveBlockRuleResult.INVALID
         if (!CallBlockRuleMatcher.isValid(type, cleaned)) return SaveBlockRuleResult.INVALID
         val canonicalRaw = CallBlockRuleMatcher.canonicalRawValue(type, cleaned)
+        if (!CallBlockRuleMatcher.isValid(type, canonicalRaw)) return SaveBlockRuleResult.INVALID
         val matchValue = CallBlockRuleMatcher.normalizedValue(type, canonicalRaw)
         val existing = id?.let { dao.getRule(it) }
         if (id != null && existing == null) return SaveBlockRuleResult.NOT_FOUND
-        if (dao.ruleSignatureExists(type.storageKey, matchValue, id ?: -1L, action.storageKey, scope.storageKey) > 0) {
+        if (
+            dao.ruleSignatureExists(
+                type.storageKey,
+                matchValue,
+                id ?: -1L,
+                action.storageKey,
+                scope.storageKey,
+            ) > 0
+        ) {
             return SaveBlockRuleResult.DUPLICATE
         }
         if (existing == null && dao.ruleCount() >= MAX_RULES) return SaveBlockRuleResult.FULL
@@ -531,7 +582,6 @@ class CallBlockRepository(context: Context) {
         number: String,
         isPrivateNumber: Boolean = false,
         isVoip: Boolean = false,
-        callerDisplayName: String? = null,
         sipCallerIdentity: SipCallerIdentity = SipCallerIdentity.UNKNOWN,
         callCreatedAt: Long = 0L,
         callerNumberVerificationStatus: CallerNumberVerificationStatus =
@@ -542,7 +592,9 @@ class CallBlockRepository(context: Context) {
             isPrivateNumber -> ""
             sipCallerIdentity.kind == SipCallerIdKind.PHONE_NUMBER -> sipCallerIdentity.phoneNumber.orEmpty()
             isVoip -> ""
-            else -> number
+            // Rejected/non-telephone handles must never leak embedded digits into number rules.
+            CallHistoryRuleCodec.isSelectableNumber(number) -> number
+            else -> ""
         }
         val canUseTelephoneRules = telephoneNumber.isNotEmpty()
         val phoneKey = PhoneKey.of(telephoneNumber)
@@ -577,19 +629,15 @@ class CallBlockRepository(context: Context) {
             for (rule in candidates) {
                 var matchedHistoryReasonValue: String? = null
                 val patternMatches = when (rule.type) {
-                    CallBlockRuleType.SPECIAL,
-                    CallBlockRuleType.BRAND_NAME,
-                    -> {
+                    CallBlockRuleType.SPECIAL -> {
                         CallBlockRuleMatcher.matches(
-                            // Pattern matching and Contacts scope are evaluated separately. Only a
-                            // SIP-phone SPECIAL rule can use Contacts scope; Brandname is name-only.
+                            // Pattern matching and Contacts scope are evaluated separately.
                             rule.copy(scope = CallBlockScope.ALL_VISIBLE_NUMBERS),
                             CallScreeningContext(
                                 number = number,
                                 contactStatus = ContactLookupStatus.UNKNOWN,
                                 isPrivateNumber = isPrivateNumber,
                                 isVoip = isVoip,
-                                callerDisplayName = callerDisplayName,
                                 sipCallerIdentity = sipCallerIdentity,
                                 callerNumberVerificationStatus = callerNumberVerificationStatus,
                             ),
@@ -723,7 +771,7 @@ class CallBlockRepository(context: Context) {
         val clean = number.trim()
         // PhoneLookup is a telephone-number provider. Treating SIP URIs/alphanumeric OEM caller
         // IDs as a lookup miss would incorrectly turn UNKNOWN into NOT_IN_CONTACTS and could make a
-        // scoped SIP-phone/Brandname rule block the wrong call.
+        // scoped SIP-phone rule block the wrong call.
         if (!CallHistoryRuleCodec.isSelectableNumber(clean)) return ContactLookupStatus.UNKNOWN
         val cancellationSignal = CancellationSignal()
         val future = try {
@@ -810,8 +858,10 @@ class CallBlockRepository(context: Context) {
         match: CallBlockMatch,
         blockedAt: Long = System.currentTimeMillis(),
     ): BlockRecordResult? {
-        val raw = number.trim()
-        val phoneKey = BlockedCallerIdentity.key(raw) ?: return null
+        sanitizeLegacyHistoryIdentitiesOnce()
+        val identity = BlockedCallerIdentity.canonicalize(number) ?: return null
+        val raw = identity.historyIdentity
+        val phoneKey = identity.key
         val displayReason = CallBlockHistoryReasonCodec.display(
             match.historyReasonType,
             match.historyReasonValue,
@@ -857,8 +907,8 @@ class CallBlockRepository(context: Context) {
         match: CallBlockMatch,
         notificationEventId: Long,
     ): BlockRecordResult? {
-        val raw = number.trim()
-        if (BlockedCallerIdentity.key(raw) == null) return null
+        val identity = BlockedCallerIdentity.canonicalize(number) ?: return null
+        val raw = identity.historyIdentity
         val displayReason = CallBlockHistoryReasonCodec.display(
             match.historyReasonType,
             match.historyReasonValue,
@@ -908,17 +958,21 @@ class CallBlockRepository(context: Context) {
             }
         }
 
-    suspend fun exportHistoryForBackup(): List<BackupBlockedCall> = dao.getHistory().mapNotNull { row ->
-        row.takeIf { CallBlockHistoryReasonCodec.isSupported(it.ruleType, it.ruleValue) }?.let {
-            BackupBlockedCall(
-                rawNumber = row.rawNumber,
-                phoneKey = row.phoneKey,
-                blockedAt = row.blockedAt,
-                ruleType = row.ruleType,
-                ruleValue = row.ruleValue,
-                consecutiveUnanswered = row.consecutiveUnanswered,
-                ruleScope = row.ruleScope,
-            )
+    suspend fun exportHistoryForBackup(): List<BackupBlockedCall> {
+        sanitizeLegacyHistoryIdentitiesOnce()
+        return dao.getHistory().mapNotNull { row ->
+            val identity = BlockedCallerIdentity.canonicalize(row.rawNumber) ?: return@mapNotNull null
+            row.takeIf { CallBlockHistoryReasonCodec.isSupported(it.ruleType, it.ruleValue) }?.let {
+                BackupBlockedCall(
+                    rawNumber = identity.historyIdentity,
+                    phoneKey = identity.key,
+                    blockedAt = row.blockedAt,
+                    ruleType = row.ruleType,
+                    ruleValue = row.ruleValue,
+                    consecutiveUnanswered = row.consecutiveUnanswered,
+                    ruleScope = row.ruleScope,
+                )
+            }
         }
     }
 
@@ -945,14 +999,47 @@ class CallBlockRepository(context: Context) {
                     if (!CallHistoryRuleCodec.isSelectableNumber(raw) || key.length < 3) return@mapNotNull null
                     Triple(backup, action, origin)
                 }
-                val validRules = rules.mapNotNull { backup ->
+                val parsedRules = rules.mapNotNull { backup ->
                     val type = CallBlockRuleType.fromStorage(backup.type) ?: return@mapNotNull null
                     val action = CallBlockAction.fromStorage(backup.action) ?: return@mapNotNull null
                     val scope = CallBlockScope.fromStorage(backup.scope) ?: return@mapNotNull null
                     if (!type.supportsAction(action)) return@mapNotNull null
                     if (!type.supportsScope(scope, backup.rawValue)) return@mapNotNull null
                     if (!CallBlockRuleMatcher.isValid(type, backup.rawValue)) return@mapNotNull null
-                    Triple(backup, action, scope)
+                    val canonicalRaw = CallBlockRuleMatcher.canonicalRawValue(type, backup.rawValue)
+                    if (!CallBlockRuleMatcher.isValid(type, canonicalRaw)) return@mapNotNull null
+                    val canonicalMatch = CallBlockRuleMatcher.normalizedValue(type, canonicalRaw)
+                    RestorableRule(
+                        backup = backup,
+                        type = type,
+                        action = action,
+                        scope = scope,
+                        canonicalRaw = canonicalRaw,
+                        canonicalMatch = canonicalMatch,
+                    )
+                }
+                // A backup can contain legacy payloads that normalize to one semantic rule. Merge
+                // them deterministically so REPLACE is independent from JSON order and never loses
+                // an enabled duplicate or its earliest user position.
+                val validRules = parsedRules.groupBy(RestorableRule::signature).values.map { duplicates ->
+                    val selected = duplicates.minWith(
+                        compareBy<RestorableRule>(
+                            { it.backup.userOrder.coerceAtLeast(0) },
+                            { it.backup.createdAt.takeIf { time -> time > 0L } ?: Long.MAX_VALUE },
+                            { it.canonicalRaw },
+                        )
+                    )
+                    selected.copy(
+                        backup = selected.backup.copy(
+                            rawValue = selected.canonicalRaw,
+                            matchValue = selected.canonicalMatch,
+                            enabled = duplicates.any { it.backup.enabled },
+                            createdAt = duplicates.mapNotNull { rule ->
+                                rule.backup.createdAt.takeIf { it > 0L }
+                            }.minOrNull() ?: 0L,
+                            userOrder = duplicates.minOf { it.backup.userOrder.coerceAtLeast(0) },
+                        )
+                    )
                 }
                 if (mode == MergeMode.REPLACE &&
                     (numberEntries.isNotEmpty() || rules.isNotEmpty()) &&
@@ -1026,21 +1113,31 @@ class CallBlockRepository(context: Context) {
                     }
                 }
 
-                val existingRules = dao.getRules().associateBy {
-                    listOf(it.action, it.type, it.matchValue, it.scope)
-                }.toMutableMap()
-                for ((backup, action, scope) in validRules) {
-                    val type = CallBlockRuleType.fromStorage(backup.type) ?: continue
-                    val raw = CallBlockRuleMatcher.canonicalRawValue(type, backup.rawValue)
-                    val match = CallBlockRuleMatcher.normalizedValue(type, raw)
-                    val key = listOf(action.storageKey, type.storageKey, match, scope.storageKey)
+                val existingRules = dao.getRules().groupBy { row ->
+                    RuleRestoreSignature(
+                        action = row.action,
+                        type = row.type,
+                        matchValue = row.toModel()?.matchValue ?: row.matchValue,
+                        scope = row.scope,
+                    )
+                }.mapValues { (_, rows) -> rows.toMutableList() }.toMutableMap()
+                for (restorable in validRules) {
+                    val backup = restorable.backup
+                    val action = restorable.action
+                    val scope = restorable.scope
+                    val type = restorable.type
+                    val raw = restorable.canonicalRaw
+                    val match = restorable.canonicalMatch
+                    val key = restorable.signature
                     if (
                         type == CallBlockRuleType.ANY &&
                         scope in setOf(CallBlockScope.SAVED_CONTACT, CallBlockScope.NOT_SAVED)
                     ) {
-                        val sameScope = existingRules.filterValues { row ->
-                            row.type == CallBlockRuleType.ANY.storageKey &&
-                                row.scope == scope.storageKey
+                        val sameScope = existingRules.filterValues { rows ->
+                            rows.any { row ->
+                                row.type == CallBlockRuleType.ANY.storageKey &&
+                                    row.scope == scope.storageKey
+                            }
                         }
                         // ADD preserves the user's current group decision. UPDATE replaces an
                         // opposite decision so the typed policy can never contain ALLOW and BLOCK
@@ -1049,14 +1146,36 @@ class CallBlockRepository(context: Context) {
                             skipped++
                             continue
                         }
-                        sameScope.filterValues { it.action != action.storageKey }.forEach { (oldKey, row) ->
-                            dao.deleteRule(row.id)
+                        sameScope.filterKeys { it.action != action.storageKey }.forEach { (oldKey, rows) ->
+                            rows.forEach { row -> dao.deleteRule(row.id) }
                             existingRules.remove(oldKey)
                         }
                     }
-                    val current = existingRules[key]
+                    var current = existingRules[key]
+                    val duplicateRows = current
+                    if (duplicateRows != null && duplicateRows.size > 1) {
+                        // Legacy payloads could bypass the stored unique index while normalizing to
+                        // one rule. Merge the physical rows before ADD/UPDATE so UI, quota and the
+                        // screening snapshot all regain the one-signature invariant.
+                        val survivor = duplicateRows.minWith(
+                            compareBy<CallBlockRuleEntity> { it.userOrder }
+                                .thenBy { it.createdAt }
+                                .thenBy { it.id }
+                        )
+                        duplicateRows.filter { it.id != survivor.id }.forEach { dao.deleteRule(it.id) }
+                        val merged = survivor.copy(
+                            rawValue = raw,
+                            matchValue = match,
+                            enabled = duplicateRows.any { it.enabled },
+                            createdAt = duplicateRows.minOf { it.createdAt },
+                            userOrder = duplicateRows.minOf { it.userOrder.coerceAtLeast(0) },
+                        )
+                        dao.updateRule(merged)
+                        current = mutableListOf(merged)
+                        existingRules[key] = current
+                    }
                     if (current == null) {
-                        if (existingRules.size >= MAX_RULES) {
+                        if (dao.ruleCount() >= MAX_RULES) {
                             truncated = true; skipped++; continue
                         }
                         val inserted = dao.insertRule(
@@ -1072,17 +1191,31 @@ class CallBlockRepository(context: Context) {
                             )
                         )
                         if (inserted != -1L) {
-                            existingRules[key] = dao.getRule(inserted)!!
+                            existingRules[key] = mutableListOf(dao.getRule(inserted)!!)
                             added++
                         } else skipped++
                     } else if (mode == MergeMode.UPDATE) {
-                        dao.updateRule(
-                            current.copy(
-                                rawValue = raw,
-                                enabled = backup.enabled,
-                                userOrder = backup.userOrder.coerceAtLeast(0),
+                        // Update every legacy row in the semantic group. Updating only the arbitrary
+                        // row selected by associateBy could leave another enabled duplicate active.
+                        current.forEach { row ->
+                            val canPersistCanonicalIdentity =
+                                (row.rawValue == raw && row.matchValue == match) ||
+                                    dao.ruleSignatureExists(
+                                        type.storageKey,
+                                        match,
+                                        row.id,
+                                        action.storageKey,
+                                        scope.storageKey,
+                                    ) == 0
+                            dao.updateRule(
+                                row.copy(
+                                    rawValue = if (canPersistCanonicalIdentity) raw else row.rawValue,
+                                    matchValue = if (canPersistCanonicalIdentity) match else row.matchValue,
+                                    enabled = backup.enabled,
+                                    userOrder = backup.userOrder.coerceAtLeast(0),
+                                )
                             )
-                        )
+                        }
                         updated++
                     } else skipped++
                 }
@@ -1093,126 +1226,65 @@ class CallBlockRepository(context: Context) {
         }
     }
 
-    private suspend fun restoreRulesLocked(
-        incoming: List<BackupBlockRule>,
-        mode: MergeMode,
-    ): SectionResult {
-        // Mark first and commit the complete replacement only after Room commits. A process death at
-        // any point in between therefore causes a safe Room reload instead of screening with stale data.
-        val snapshotGeneration = CallBlockRuleSnapshotStore.markDirty(appContext)
-        return try {
-            db.withTransaction {
-                val validIncoming = incoming.mapNotNull { backup ->
-                    val type = CallBlockRuleType.fromStorage(backup.type) ?: return@mapNotNull null
-                    if (!CallBlockRuleMatcher.isValid(type, backup.rawValue)) return@mapNotNull null
-                    backup to type
-                }
-
-                // Một file có khai báo quy tắc nhưng toàn bộ payload đều hỏng không được phép xoá sạch dữ liệu
-                // hiện tại trong chế độ REPLACE. Danh sách rỗng hợp lệ vẫn có nghĩa là chủ động thay bằng 0 quy tắc.
-                if (mode == MergeMode.REPLACE && incoming.isNotEmpty() && validIncoming.isEmpty()) {
-                    return@withTransaction SectionResult(skipped = incoming.size)
-                }
-
-                var added = 0
-                var updated = 0
-                var skipped = incoming.size - validIncoming.size
-                var truncated = false
-
-                if (mode == MergeMode.REPLACE) dao.deleteAllRules()
-                val existing = dao.getRules().associateBy { it.type to it.matchValue }.toMutableMap()
-
-                for ((backup, type) in validIncoming) {
-                    val canonicalRaw = CallBlockRuleMatcher.canonicalRawValue(type, backup.rawValue)
-                    val match = CallBlockRuleMatcher.normalizedValue(type, canonicalRaw)
-                    val key = type.storageKey to match
-                    val current = existing[key]
-                    if (current == null) {
-                        if (existing.size >= MAX_RULES) {
-                            truncated = true
-                            skipped++
-                            continue
-                        }
-                        val inserted = dao.insertRule(
-                            CallBlockRuleEntity(
-                                type = type.storageKey,
-                                rawValue = canonicalRaw,
-                                matchValue = match,
-                                enabled = backup.enabled,
-                                createdAt = backup.createdAt.takeIf { it > 0L } ?: System.currentTimeMillis(),
-                            )
-                        )
-                        if (inserted != -1L) {
-                            existing[key] = dao.getRule(inserted)!!
-                            added++
-                        } else skipped++
-                    } else if (mode == MergeMode.UPDATE) {
-                        dao.updateRule(
-                            current.copy(
-                                rawValue = canonicalRaw,
-                                enabled = backup.enabled,
-                            )
-                        )
-                        updated++
-                    } else {
-                        skipped++
-                    }
-                }
-                SectionResult(added = added, updated = updated, skipped = skipped, truncated = truncated)
-            }
-        } finally {
-            refreshRuleSnapshotBestEffort(snapshotGeneration)
-        }
-    }
-
     /**
      * Sự kiện chặn là immutable: ADD/UPDATE đều chỉ thêm sự kiện chưa có; REPLACE thay toàn bộ.
      * Không lưu ruleId vì id sau restore có thể khác; snapshot loại/giá trị vẫn đủ diễn giải lý do.
      */
-    suspend fun restoreHistory(incoming: List<BackupBlockedCall>, mode: MergeMode): SectionResult = db.withTransaction {
-        val validIncoming = incoming.mapNotNull { backup ->
-            if (!CallBlockHistoryReasonCodec.isSupported(backup.ruleType, backup.ruleValue)) {
-                return@mapNotNull null
+    suspend fun restoreHistory(incoming: List<BackupBlockedCall>, mode: MergeMode): SectionResult {
+        sanitizeLegacyHistoryIdentitiesOnce()
+        return db.withTransaction {
+            val validIncoming = incoming.mapNotNull { backup ->
+                if (!CallBlockHistoryReasonCodec.isSupported(backup.ruleType, backup.ruleValue)) {
+                    return@mapNotNull null
+                }
+                val identity = BlockedCallerIdentity.canonicalize(backup.rawNumber)
+                    ?: return@mapNotNull null
+                backup to identity
             }
-            val key = BlockedCallerIdentity.key(backup.rawNumber) ?: return@mapNotNull null
-            backup to key
-        }
-        if (mode == MergeMode.REPLACE && incoming.isNotEmpty() && validIncoming.isEmpty()) {
-            return@withTransaction SectionResult(skipped = incoming.size)
-        }
+            if (mode == MergeMode.REPLACE && incoming.isNotEmpty() && validIncoming.isEmpty()) {
+                return@withTransaction SectionResult(skipped = incoming.size)
+            }
 
-        var added = 0
-        var skipped = incoming.size - validIncoming.size
-        var truncated = false
-        if (mode == MergeMode.REPLACE) dao.deleteAllHistory()
+            var added = 0
+            var skipped = incoming.size - validIncoming.size
+            var truncated = false
+            if (mode == MergeMode.REPLACE) dao.deleteAllHistory()
 
-        // Nạp bản mới trước để khi vượt giới hạn, người dùng giữ được thông tin hữu ích nhất.
-        for ((backup, key) in validIncoming.sortedByDescending { it.first.blockedAt }) {
-            val blockedAt = backup.blockedAt.takeIf { it > 0L } ?: System.currentTimeMillis()
-            if (dao.historySignatureExists(key, blockedAt, backup.ruleType, backup.ruleValue) > 0) {
-                skipped++
-                continue
-            }
-            if (dao.historyCount() >= MAX_HISTORY) {
-                truncated = true
-                skipped++
-                continue
-            }
-            val inserted = dao.insertHistory(
-                CallBlockHistoryEntity(
-                    rawNumber = backup.rawNumber,
-                    phoneKey = key,
-                    blockedAt = blockedAt,
-                    ruleType = backup.ruleType,
-                    ruleValue = backup.ruleValue,
-                    consecutiveUnanswered = backup.consecutiveUnanswered.coerceAtLeast(0),
-                    ruleScope = CallBlockScope.fromStorage(backup.ruleScope)?.storageKey
-                        ?: CallBlockScope.ALL_VISIBLE_NUMBERS.storageKey,
+            // Nạp bản mới trước để khi vượt giới hạn, người dùng giữ được thông tin hữu ích nhất.
+            for ((backup, identity) in validIncoming.sortedByDescending { it.first.blockedAt }) {
+                val blockedAt = backup.blockedAt.takeIf { it > 0L } ?: System.currentTimeMillis()
+                if (
+                    dao.historySignatureExists(
+                        identity.key,
+                        blockedAt,
+                        backup.ruleType,
+                        backup.ruleValue,
+                    ) > 0
+                ) {
+                    skipped++
+                    continue
+                }
+                if (dao.historyCount() >= MAX_HISTORY) {
+                    truncated = true
+                    skipped++
+                    continue
+                }
+                val inserted = dao.insertHistory(
+                    CallBlockHistoryEntity(
+                        rawNumber = identity.historyIdentity,
+                        phoneKey = identity.key,
+                        blockedAt = blockedAt,
+                        ruleType = backup.ruleType,
+                        ruleValue = backup.ruleValue,
+                        consecutiveUnanswered = backup.consecutiveUnanswered.coerceAtLeast(0),
+                        ruleScope = CallBlockScope.fromStorage(backup.ruleScope)?.storageKey
+                            ?: CallBlockScope.ALL_VISIBLE_NUMBERS.storageKey,
+                    )
                 )
-            )
-            if (inserted != -1L) added++ else skipped++
+                if (inserted != -1L) added++ else skipped++
+            }
+            SectionResult(added = added, skipped = skipped, truncated = truncated)
         }
-        SectionResult(added = added, skipped = skipped, truncated = truncated)
     }
 
     companion object {
@@ -1221,6 +1293,8 @@ class CallBlockRepository(context: Context) {
         const val MAX_RULES = 200
         const val MAX_NUMBER_ENTRIES = 2_000
         private const val LOG_TAG = "CallBlockRepository"
+        private const val DATA_MIGRATION_PREFS = "call_block_data_migrations"
+        private const val HISTORY_IDENTITY_V1 = "history_identity_v1"
         private const val CONTACT_LOOKUP_TIMEOUT_MS = 450L
         /** Serializes cross-store group policy transitions across all repository instances. */
         private val groupPolicyMutex = Mutex()
@@ -1319,9 +1393,49 @@ class CallBlockRepository(context: Context) {
 
     /** Used by the service to bootstrap existing installs before the first callback where possible. */
     suspend fun warmScreeningRuleSnapshot() {
+        sanitizeLegacyHistoryIdentitiesOnce()
         if (CallBlockRuleSnapshotStore.rulesOrNull(appContext) == null) {
             enabledRulesForScreening()
         }
+    }
+
+    /**
+     * Older builds persisted the complete SIP handle, including password/header data. Rewrite every
+     * supported identity to a safe canonical form and redact malformed legacy SIP data before the
+     * migration is marked complete.
+     */
+    private suspend fun sanitizeLegacyHistoryIdentitiesOnce() {
+        val preferences = appContext.getSharedPreferences(DATA_MIGRATION_PREFS, Context.MODE_PRIVATE)
+        if (preferences.getBoolean(HISTORY_IDENTITY_V1, false)) return
+        db.withTransaction {
+            dao.getHistory().forEach { row ->
+                val identity = BlockedCallerIdentity.canonicalize(row.rawNumber)
+                    ?: BlockedCallerIdentity.redactLegacySip(
+                        row.rawNumber,
+                        UUID.randomUUID().toString(),
+                    )
+                    ?: return@forEach
+                if (identity.historyIdentity == row.rawNumber && identity.key == row.phoneKey) {
+                    return@forEach
+                }
+                val canonicalSignatureExists = dao.historySignatureExists(
+                    identity.key,
+                    row.blockedAt,
+                    row.ruleType,
+                    row.ruleValue,
+                    exceptId = row.id,
+                ) > 0
+                if (canonicalSignatureExists) {
+                    // This is the exact callback signature guarded by the table's unique index. Old
+                    // non-canonical keys could bypass it; coalesce that retry instead of splitting
+                    // one caller across incompatible count keys.
+                    dao.deleteHistory(row.id)
+                } else {
+                    dao.updateHistoryIdentity(row.id, identity.historyIdentity, identity.key)
+                }
+            }
+        }
+        preferences.edit().putBoolean(HISTORY_IDENTITY_V1, true).apply()
     }
 
     private suspend fun refreshRuleSnapshotBestEffort(expectedGeneration: Long) {

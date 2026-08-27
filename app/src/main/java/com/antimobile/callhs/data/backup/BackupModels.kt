@@ -6,7 +6,8 @@ import com.antimobile.callhs.util.QrScanEntry
 /**
  * MÔ HÌNH cho tính năng SAO LƯU & KHÔI PHỤC dữ liệu do app tự quản.
  *
- * Chỉ gồm dữ liệu app SỞ HỮU (mẫu tin nhắn, lịch sử quét QR, nhóm phân loại, bộ chặn, số của tôi, cài đặt hiển thị).
+ * Chỉ gồm dữ liệu app SỞ HỮU (mẫu tin nhắn, lịch sử quét QR, nhóm phân loại, bộ chặn, số của tôi,
+ * cài đặt cuộc gọi đi và cài đặt hiển thị).
  * **Lịch sử cuộc gọi KHÔNG nằm trong đây** — đó là dữ liệu HỆ THỐNG chỉ-đọc ([CallLog]); app không thể ghi
  * lại vào máy (Android chỉ cho trình gọi mặc định làm việc đó) nên cố tình loại khỏi sao lưu.
  */
@@ -19,6 +20,7 @@ enum class BackupSection(val jsonKey: String) {
     BLOCK_RULES("callBlockRules"),
     BLOCK_HISTORY("blockedCalls"),
     MY_NUMBER("myNumbers"),
+    OUTGOING_CALL("outgoingCallSettings"),
     DISPLAY("display");
 
     companion object {
@@ -95,6 +97,8 @@ data class BackupBlockConfig(
     val repeatUnknownCallerGuardWindowMinutes: Int? = null,
     /** Null means an older backup omitted schedules; an empty list explicitly clears them. */
     val dailySchedule: List<BackupBlockScheduleWindow>? = null,
+    /** Cấu hình âm thanh/rung/cách hiển thị thông báo chặn; null với backup v1-v5. */
+    val advancedNotification: BackupBlockNotificationConfig? = null,
 ) {
     val hasSettings: Boolean
         get() = enabled != null ||
@@ -104,7 +108,8 @@ data class BackupBlockConfig(
             repeatUnknownCallerGuardEnabled != null ||
             repeatUnknownCallerGuardThreshold != null ||
             repeatUnknownCallerGuardWindowMinutes != null ||
-            dailySchedule != null
+            dailySchedule != null ||
+            advancedNotification != null
 
     val hasAny: Boolean
         get() = hasSettings || rules.isNotEmpty() || numberEntries.isNotEmpty()
@@ -119,6 +124,27 @@ data class BackupBlockScheduleWindow(
     val presetKey: String? = null,
     val enabled: Boolean = true,
     val weekdaysMask: Int = com.antimobile.callhs.data.blocking.ALL_WEEKDAYS_MASK,
+)
+
+/** Các lựa chọn thông báo có thể chuyển an toàn sang máy khác. */
+data class BackupBlockNotificationAlert(
+    val soundEnabled: Boolean,
+    val vibrationEnabled: Boolean,
+    /** Chỉ lưu key của âm thanh đóng gói; URI tệp SAF tùy chỉnh không có tính di động. */
+    val soundPreset: String,
+    val presentation: String,
+)
+
+data class BackupBlockNotificationPeriod(
+    val period: String,
+    val enabled: Boolean,
+    val alert: BackupBlockNotificationAlert,
+)
+
+data class BackupBlockNotificationConfig(
+    val scheduleEnabled: Boolean,
+    val defaultAlert: BackupBlockNotificationAlert,
+    val periods: List<BackupBlockNotificationPeriod>,
 )
 
 /** Portable exact-number entry used by both the allowlist and blocklist. */
@@ -166,6 +192,22 @@ data class BackupDisplay(
     val hasAny: Boolean get() = themePref != null || langPref != null || fontScale != null || smsStrip != null
 }
 
+/** Cài đặt cảnh báo cuộc gọi đi; quyền/vai trò Android không thể và không được sao lưu. */
+data class BackupOutgoingCallConfig(
+    val enabled: Boolean?,
+    val notifyOffNetwork: Boolean?,
+    val notifyBlocklist: Boolean?,
+    val notifyAllowlist: Boolean?,
+    val presentation: String?,
+) {
+    val hasAny: Boolean
+        get() = enabled != null ||
+            notifyOffNetwork != null ||
+            notifyBlocklist != null ||
+            notifyAllowlist != null ||
+            presentation != null
+}
+
 /**
  * Nội dung một file sao lưu ĐÃ PHÂN TÍCH, giữ trong bộ nhớ (ViewModel) để hiển thị & khôi phục. Mục nào
  * VẮNG trong file thì trường tương ứng = null (khác với "có nhưng rỗng").
@@ -180,6 +222,7 @@ data class ParsedBackup(
     val blockRules: BackupBlockConfig?,
     val blockedCalls: List<BackupBlockedCall>?,
     val myNumbers: List<MyNumberEntry>?,
+    val outgoingCall: BackupOutgoingCallConfig?,
     val display: BackupDisplay?,
 ) {
     /** Các mục THỰC SỰ có trong file (để hiện danh sách chọn khi khôi phục). */
@@ -191,6 +234,7 @@ data class ParsedBackup(
             if (blockRules != null) add(BackupSection.BLOCK_RULES)
             if (blockedCalls != null) add(BackupSection.BLOCK_HISTORY)
             if (myNumbers != null) add(BackupSection.MY_NUMBER)
+            if (outgoingCall != null) add(BackupSection.OUTGOING_CALL)
             if (display != null) add(BackupSection.DISPLAY)
         }
 
@@ -202,6 +246,7 @@ data class ParsedBackup(
         BackupSection.BLOCK_RULES -> blockRules?.let { it.rules.size + it.numberEntries.size } ?: 0
         BackupSection.BLOCK_HISTORY -> blockedCalls?.size ?: 0
         BackupSection.MY_NUMBER -> myNumbers?.size ?: 0
+        BackupSection.OUTGOING_CALL -> if (outgoingCall != null) 1 else 0
         BackupSection.DISPLAY -> if (display != null) 1 else 0
     }
 }

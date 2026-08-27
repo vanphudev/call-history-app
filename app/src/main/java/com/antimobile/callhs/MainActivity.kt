@@ -25,6 +25,7 @@ import com.antimobile.callhs.data.blocking.CallBlockSettings
 import com.antimobile.callhs.ui.navigation.AppNav
 import com.antimobile.callhs.ui.permissions.PermissionGate
 import com.antimobile.callhs.i18n.LanguageSettings
+import com.antimobile.callhs.ui.components.AppToastHost
 import com.antimobile.callhs.ui.theme.AppBackground
 import com.antimobile.callhs.ui.theme.CallHSTheme
 import com.antimobile.callhs.ui.theme.ThemeSettings
@@ -101,6 +102,9 @@ class MainActivity : ComponentActivity() {
                     // Cổng quyền BẮT BUỘC: xin lần lượt 3 quyền (nhật ký cuộc gọi → thông tin SIM → danh bạ)
                     // theo thứ tự rõ ràng trước khi vào ứng dụng.
                     PermissionGate { AppNav() }
+                    // Host toast DUY NHẤT điều phối queue toàn app; host trong dialog/sheet chỉ nhận phần hiển thị
+                    // để toast luôn nổi trên đúng cửa sổ đang ở trên cùng.
+                    AppToastHost(modifier = Modifier.fillMaxSize(), isRootHost = true)
                 }
             }
         }

@@ -274,6 +274,7 @@ fun AppBottomSheet(
         // Cấp LẠI density theo cỡ chữ người dùng: ModalBottomSheet là cửa sổ Compose riêng nên không kế thừa
         // override ở gốc app (xem [ProvideAppDensity]). Không bọc thì chữ trong sheet kẹt ở 100%.
         ProvideAppDensity {
+        Box(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.fillMaxWidth().then(heightCap)) {
             // Hàng tiêu đề GHIM trên cùng (không cuộn): tiêu đề bên trái + nút đóng (X) góc phải nếu bật.
             if (title != null || showCloseButton) {
@@ -311,6 +312,8 @@ fun AppBottomSheet(
             ) {
                 content(close)
             }
+        }
+        AppToastHost(modifier = Modifier.matchParentSize())
         }
         }
     }

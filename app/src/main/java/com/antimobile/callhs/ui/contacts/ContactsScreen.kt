@@ -127,6 +127,7 @@ import com.antimobile.callhs.ui.calldetail.ShareContactSheet
 import com.antimobile.callhs.ui.calldetail.TemplateEditorScreen
 import com.antimobile.callhs.ui.components.ActionGlyph
 import com.antimobile.callhs.ui.components.AppBottomSheet
+import com.antimobile.callhs.ui.components.AppToastType
 import com.antimobile.callhs.ui.components.ContextAction
 import com.antimobile.callhs.ui.components.ContextMenuOverlay
 import com.antimobile.callhs.ui.components.GearIndexBar
@@ -530,14 +531,14 @@ fun ContactsScreen(
                     val label = categoryLabel(cat)
                     if (desired) {
                         when (categoryRepo.addMember(cat.id, number)) {
-                            AddMemberResult.ADDED -> CallActions.toast(context, s.category.addedTo(label))
-                            AddMemberResult.FULL -> CallActions.toast(context, s.category.maxMembers)
+                            AddMemberResult.ADDED -> CallActions.toast(context, s.category.addedTo(label), AppToastType.Success)
+                            AddMemberResult.FULL -> CallActions.toast(context, s.category.maxMembers, AppToastType.Warning)
                             AddMemberResult.ALREADY -> CallActions.toast(context, s.category.alreadyAdded)
-                            AddMemberResult.INVALID -> CallActions.toast(context, s.category.invalidNumber)
+                            AddMemberResult.INVALID -> CallActions.toast(context, s.category.invalidNumber, AppToastType.Error)
                         }
                     } else {
                         categoryRepo.removeMember(cat.id, PhoneKey.of(number))
-                        CallActions.toast(context, s.category.removedFrom(label))
+                        CallActions.toast(context, s.category.removedFrom(label), AppToastType.Success)
                     }
                 }
             },

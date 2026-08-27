@@ -118,12 +118,22 @@ interface CallBlockDao {
         """
         SELECT COUNT(*) FROM call_block_history
         WHERE phoneKey = :phoneKey AND blockedAt = :blockedAt AND ruleType = :ruleType AND ruleValue = :ruleValue
+          AND id != :exceptId
         """
     )
-    suspend fun historySignatureExists(phoneKey: String, blockedAt: Long, ruleType: String, ruleValue: String): Int
+    suspend fun historySignatureExists(
+        phoneKey: String,
+        blockedAt: Long,
+        ruleType: String,
+        ruleValue: String,
+        exceptId: Long = -1L,
+    ): Int
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertHistory(history: CallBlockHistoryEntity): Long
+
+    @Query("UPDATE call_block_history SET rawNumber = :rawNumber, phoneKey = :phoneKey WHERE id = :id")
+    suspend fun updateHistoryIdentity(id: Long, rawNumber: String, phoneKey: String)
 
     @Query("DELETE FROM call_block_history WHERE id = :id")
     suspend fun deleteHistory(id: Long)

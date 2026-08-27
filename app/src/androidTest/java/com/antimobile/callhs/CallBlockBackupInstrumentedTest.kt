@@ -6,6 +6,8 @@ import com.antimobile.callhs.data.backup.BackupManager
 import com.antimobile.callhs.data.backup.BackupSection
 import com.antimobile.callhs.data.backup.MergeMode
 import com.antimobile.callhs.data.blocking.CallBlockPauseDuration
+import com.antimobile.callhs.data.blocking.CallBlockScheduleAction
+import com.antimobile.callhs.data.blocking.CallBlockTimeWindow
 import com.antimobile.callhs.data.blocking.CallBlockRepository
 import com.antimobile.callhs.data.blocking.CallBlockSettings
 import com.antimobile.callhs.data.blocking.BlockNotificationMode
@@ -59,7 +61,7 @@ class CallBlockBackupInstrumentedTest {
         val root = JSONObject(
             BackupManager.buildJson(context, setOf(BackupSection.BLOCK_RULES))
         )
-        assertEquals(4, root.getInt("version"))
+        assertEquals(6, root.getInt("version"))
         val blockConfig = root
             .getJSONObject("sections")
             .getJSONObject(BackupSection.BLOCK_RULES.jsonKey)
@@ -96,6 +98,58 @@ class CallBlockBackupInstrumentedTest {
         assertTrue(runtime.contains("pause_started_at"))
         assertTrue(runtime.contains("pause_until"))
         assertTrue(runtime.contains("repeat_unknown_caller_guard_session_generation"))
+    }
+
+    @Test
+    fun recurringBlockAndPauseScheduleRoundTripsWithDaysAndEnabledState() = runBlocking {
+        val original = CallBlockSettings.dailySchedule(context)
+        val backedUp = listOf(
+            CallBlockTimeWindow(
+                id = "weekday_pause",
+                action = CallBlockScheduleAction.PAUSE,
+                startMinute = 8 * 60,
+                endMinute = 9 * 60,
+                enabled = true,
+                weekdaysMask = 0b0011111,
+            ),
+            CallBlockTimeWindow(
+                id = "weekend_block",
+                action = CallBlockScheduleAction.BLOCK,
+                startMinute = 22 * 60,
+                endMinute = 6 * 60,
+                presetKey = "night",
+                enabled = false,
+                weekdaysMask = 0b1100000,
+            ),
+        )
+
+        try {
+            assertTrue(CallBlockSettings.replaceDailySchedule(context, backedUp))
+            val json = BackupManager.buildJson(context, setOf(BackupSection.BLOCK_RULES))
+            val parsed = requireNotNull(BackupManager.parse(json))
+            assertEquals(backedUp, parsed.blockRules?.dailySchedule?.map { value ->
+                CallBlockTimeWindow(
+                    id = value.id,
+                    action = requireNotNull(CallBlockScheduleAction.fromStorage(value.action)),
+                    startMinute = value.startMinute,
+                    endMinute = value.endMinute,
+                    presetKey = value.presetKey,
+                    enabled = value.enabled,
+                    weekdaysMask = value.weekdaysMask,
+                )
+            })
+
+            assertTrue(CallBlockSettings.replaceDailySchedule(context, emptyList()))
+            BackupManager.restore(
+                context,
+                parsed,
+                setOf(BackupSection.BLOCK_RULES),
+                MergeMode.UPDATE,
+            )
+            assertEquals(backedUp, CallBlockSettings.dailySchedule(context))
+        } finally {
+            CallBlockSettings.replaceDailySchedule(context, original)
+        }
     }
 
     @Test
@@ -821,7 +875,7 @@ class CallBlockBackupInstrumentedTest {
     fun futureBackupVersionAndMalformedV4EnabledAreRejected() {
         assertNull(
             BackupManager.parse(
-                """{"_format":"callhs-backup","version":5,"sections":{}}"""
+                """{"_format":"callhs-backup","version":7,"sections":{}}"""
             )
         )
 

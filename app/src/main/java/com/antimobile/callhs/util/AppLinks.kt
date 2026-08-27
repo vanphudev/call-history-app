@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import com.antimobile.callhs.i18n.appStrings
+import com.antimobile.callhs.ui.components.AppToastType
 
 /**
  * NƠI DUY NHẤT chứa danh tính & liên kết của CallHS (đổi tài khoản/repo GitHub chỉ sửa ở đây).
@@ -31,7 +32,7 @@ object AppLinks {
     fun openUrl(context: Context, url: String) {
         runCatching {
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-        }.onFailure { CallActions.toast(context, appStrings().actions.linkOpenFailed) }
+        }.onFailure { CallActions.toast(context, appStrings().actions.linkOpenFailed, AppToastType.Error) }
     }
 
     /** Soạn email tới nhà phát triển (chỉ mở ứng dụng email, không tự gửi). */
@@ -39,6 +40,6 @@ object AppLinks {
         val uri = Uri.parse("mailto:$CONTACT_EMAIL?subject=" + Uri.encode(subject))
         runCatching {
             context.startActivity(Intent(Intent.ACTION_SENDTO, uri))
-        }.onFailure { CallActions.toast(context, appStrings().common.emailOpenFailed) }
+        }.onFailure { CallActions.toast(context, appStrings().common.emailOpenFailed, AppToastType.Error) }
     }
 }

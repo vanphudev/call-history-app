@@ -165,8 +165,10 @@ lookup `UNKNOWN`; `ALL_VISIBLE_NUMBERS` vẫn hoạt động độc lập.
 - `CARRIER`: dataset nhà mạng nằm trong code.
 - `GEOGRAPHIC`: mã gọi quốc tế `+`/`00`, preset ngoài `+84`, quốc gia riêng và đầu số Việt Nam
   `024`, họ `022x`, `028`, `059`, `099`.
-- `SPECIAL`: chỉ gồm cuộc gọi ẩn số và VoIP best-effort mà OEM thực sự chuyển callback. Hai loại
-  callback này luôn dùng `ALL_VISIBLE_NUMBERS`, nên editor không hiển thị scope danh bạ.
+- `SPECIAL`: gồm cuộc gọi ẩn số, SIP URI có user là số và SIP URI có user dạng text. Private và
+  SIP-text luôn dùng `ALL_VISIBLE_NUMBERS`; SIP-phone có thể dùng scope danh bạ nhờ user đã được
+  tách thành số. `VOIP` broad chỉ là token tương thích dữ liệu cũ vì non-`tel` không chứng minh được
+  transport VoIP và có thể chặn nhầm custom handle trên OEM.
 - Trạng thái “ngoài danh bạ” không còn là `SPECIAL`: nó được cấu hình duy nhất tại nhóm
   `ANY + NOT_SAVED`, tránh các tổ hợp vô nghĩa như `unknown_contact + SAVED_CONTACT` và tránh hai
   nơi cấu hình cùng một hành vi.
@@ -306,7 +308,7 @@ Các bảng app-owned:
 `app/schemas/.../1.json` hiện tại và chưa chứa migration hay schema lịch sử. Khi thay đổi cấu trúc trong giai
 đoạn phát triển, dữ liệu cài thử được xoá/tạo mới thay vì chuyển đổi qua nhiều version.
 
-## 10. Backup JSON v4
+## 10. Backup JSON v6 (blocker schema v4)
 
 Section `callBlockRules`:
 
@@ -318,6 +320,37 @@ Section `callBlockRules`:
   "repeatUnknownCallerGuardEnabled": false,
   "repeatUnknownCallerGuardThreshold": 2,
   "repeatUnknownCallerGuardWindowMinutes": 15,
+  "dailySchedule": [
+    {
+      "id": "weekday_pause",
+      "action": "pause",
+      "startMinute": 480,
+      "endMinute": 540,
+      "enabled": true,
+      "weekdaysMask": 31
+    }
+  ],
+  "advancedNotification": {
+    "scheduleEnabled": false,
+    "default": {
+      "soundEnabled": true,
+      "vibrationEnabled": true,
+      "soundPreset": "pulse",
+      "presentation": "heads_up"
+    },
+    "periods": [
+      {
+        "period": "morning",
+        "enabled": true,
+        "alert": {
+          "soundEnabled": true,
+          "vibrationEnabled": false,
+          "soundPreset": "crystal",
+          "presentation": "status_bar"
+        }
+      }
+    ]
+  },
   "numberEntries": [
     {
       "action": "allow",
@@ -359,6 +392,9 @@ Quy tắc:
   `ALLOW + ANY + SAVED_CONTACT`;
   method `allow` thành protection OFF; cadence 5/10 thành `every`.
 - Backup không xuất pause, ledger hoặc session generation.
+- Lịch `BLOCK/PAUSE` lặp theo ngày được backup đủ action, phút bắt đầu/kết thúc, ngày áp dụng và trạng thái.
+- Cài đặt thông báo nâng cao backup đủ âm thanh/rung/cách hiển thị mặc định và bốn khung giờ. Tệp âm thanh
+  SAF tùy chỉnh không có tính di động; export dùng preset `pulse` để máy mới không nhận URI mất quyền đọc.
 - `UPDATE/REPLACE` reset guard namespace trước khi publish rule mới; `ADD` giữ ledger trừ khi merge tạo
   `BLOCK_ALWAYS`, lúc đó canonicalization tắt guard.
 - `blockedCalls` là lịch sử app-owned, không phải bản sao Call Log hệ thống.
@@ -425,21 +461,25 @@ thứ tự đọc TalkBack phải theo đúng thứ tự sáu bước.
 
 - Editor theo `CategoryEditorScreen`: top bar/insets, viewport cuộn, save bar theo IME/navigation bars.
 - Chọn action và scope rõ ràng. `SPECIAL` là single-select: private, SIP URI có user là số điện
-  thoại, hoặc SIP URI có user dạng text; `BRAND_NAME` là một advanced type độc lập và không có
-  Contacts scope.
+  thoại, hoặc SIP URI có user dạng text.
 - Private luôn có scope `ALL_VISIBLE_NUMBERS` và ẩn “Kiểm tra số nào?” vì không có số để tra danh
-  bạ. SIP-phone tách toàn bộ user trước `@`, dùng phần đó cho number rules và Contacts scope;
-  SIP-text luôn `ALL_VISIBLE_NUMBERS`, không bao giờ trích riêng các chữ số nằm trong text.
-- Chỉ scheme `sip:`/`sips:` với user và host hợp lệ được phân loại. URI khác hoặc sai định dạng fail
-  open. Brandname khớp CNAM chính xác, phân biệt hoa/thường và tối đa 5 tên mỗi quy tắc; CLI dạng
-  `tel:` tiếp tục do number rules xử lý. Tên người dùng lưu trong Contacts là `contactDisplayName`,
-  tách biệt với CNAM/`callerDisplayName`, nên Brandname luôn dùng scope `ALL_VISIBLE_NUMBERS` và ẩn
-  “Kiểm tra số nào?”.
+  bạ. SIP-phone tách subscriber trước `@`, ghép `phone-context` toàn cục nếu subscriber là số cục bộ,
+  rồi mới dùng kết quả cho number rules và Contacts scope; SIP-text luôn `ALL_VISIBLE_NUMBERS`, không
+  bao giờ trích riêng các chữ số nằm trong text.
+- Chỉ scheme `sip:`/`sips:` với user, host và port hợp lệ được phân loại; escape phần trăm hỏng, host
+  sai hoặc URI khác đều fail open. Parser chỉ tin delimiter còn hiện diện trong encoded
+  scheme-specific part và decode từng component đúng một lần; dạng opaque đã encode cả delimiter
+  (không thể phân biệt an toàn với URI sai chuẩn), URI có fragment và SIP có header đều fail open.
+  History chỉ giữ URI chuẩn đã bỏ password/header/tham số nhạy cảm; dữ liệu SIP cũ sai chuẩn được
+  thay bằng định danh redacted theo id nội bộ, không băm/lưu lại secret. `tel:` theo RFC 3966 bỏ
+  `ext`/`isub` khỏi số dùng để so
+  khớp và áp `phone-context` toàn cục khi có thể.
+- `tel:` có subscriber là số điện thoại hợp lệ tiếp tục do number rules xử lý; subscriber không phải
+  số điện thoại hợp lệ phải fail open và không được rút các chữ số nằm bên trong sang number rules.
 - Cú pháp user/host và `user=phone` theo [RFC 3261](https://www.rfc-editor.org/rfc/rfc3261.html);
   `tel:` theo [RFC 3966](https://www.rfc-editor.org/rfc/rfc3966.html). Android chuẩn chỉ chuyển
   `tel:` vào [`CallScreeningService`](https://developer.android.com/reference/android/telecom/CallScreeningService).
-  Callback chuẩn cũng không liệt kê `callerDisplayName` trong các trường được cung cấp; vì vậy SIP
-  và Brandname đều là best-effort trên OEM có mở rộng callback.
+  Vì vậy SIP chỉ hoạt động best-effort trên OEM có chuyển non-`tel`.
 - Quy tắc đầu tiên khớp thắng. Nhấn giữ để lên/xuống, bật/tắt hoặc xoá.
 - Sheet dùng `AppBottomSheet`; row chọn dùng `FilterOptionRow`; card dùng `PanelCard`. Chỉ tab chính
   và các lựa chọn ngưỡng ngắn phù hợp mới dùng `Segmented`.
@@ -450,7 +490,7 @@ thứ tự đọc TalkBack phải theo đúng thứ tự sáu bước.
 - Card **Các vấn đề thường gặp** mở một destination riêng, không thay đổi cấu hình chỉ vì người dùng mở màn.
 - Màn hướng dẫn hiển thị bảy triệu chứng dạng mở rộng/thu gọn: bộ chặn không hoạt động, cuộc gọi vẫn lọt
   qua, chặn nhầm số quan trọng, không có notification, notification không âm/rung/heads-up, thiếu lịch sử,
-  và giới hạn với số ẩn/VoIP/brandname.
+  và giới hạn với số ẩn/VoIP/SIP.
 - Mỗi mục tách rõ **Nguyên nhân có thể** và **Cách khắc phục**. Các mục liên quan có shortcut tới cài đặt
   chặn cuộc gọi hoặc kênh notification của Android; shortcut không tự ý thay đổi lựa chọn của người dùng.
 - Hướng dẫn phải phản ánh đúng thứ tự ưu tiên rule, sự khác nhau giữa block/silence/allow, lịch notification,

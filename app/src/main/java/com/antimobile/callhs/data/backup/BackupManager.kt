@@ -3,8 +3,16 @@ package com.antimobile.callhs.data.backup
 import android.content.Context
 import android.net.Uri
 import com.antimobile.callhs.data.blocking.BlockNotificationMode
+import com.antimobile.callhs.data.blocking.BlockNotificationAdvancedConfig
+import com.antimobile.callhs.data.blocking.BlockNotificationAlert
+import com.antimobile.callhs.data.blocking.BlockNotificationPeriod
+import com.antimobile.callhs.data.blocking.BlockNotificationPeriodSettings
+import com.antimobile.callhs.data.blocking.BlockNotificationPresentation
+import com.antimobile.callhs.data.blocking.BlockNotificationSound
+import com.antimobile.callhs.data.blocking.BlockNotificationSoundPreset
 import com.antimobile.callhs.data.blocking.ALL_WEEKDAYS_MASK
 import com.antimobile.callhs.data.blocking.CallBlockMethod
+import com.antimobile.callhs.data.blocking.CallBlockNotificationSettings
 import com.antimobile.callhs.data.blocking.CallBlockAction
 import com.antimobile.callhs.data.blocking.CallBlockScope
 import com.antimobile.callhs.data.blocking.CallBlockRuleMatcher
@@ -23,6 +31,9 @@ import com.antimobile.callhs.data.blocking.CallBlockTimeWindow
 import com.antimobile.callhs.data.blocking.SavedContactGroupPolicy
 import com.antimobile.callhs.data.blocking.UnknownNumberPolicy
 import com.antimobile.callhs.data.local.CategoryRepository
+import com.antimobile.callhs.data.outgoing.OutgoingCallConfig
+import com.antimobile.callhs.data.outgoing.OutgoingCallPresentation
+import com.antimobile.callhs.data.outgoing.OutgoingCallSettings
 import com.antimobile.callhs.i18n.LangPref
 import com.antimobile.callhs.i18n.LanguageSettings
 import com.antimobile.callhs.ui.theme.ThemeSettings
@@ -44,7 +55,7 @@ import org.json.JSONObject
  *
  * Định dạng file (khoá `_format` để nhận diện; mục nào KHÔNG chọn thì vắng khỏi `sections`):
  * ```
- * { "_format":"callhs-backup", "version":4, "appVersion":"…", "createdAt":…,
+ * { "_format":"callhs-backup", "version":6, "appVersion":"…", "createdAt":…,
  *   "sections": {
  *     "templates":[ {"title":…,"content":…} ],
  *     "qrHistory":[ {"raw":…,"time":…} ],
@@ -54,10 +65,13 @@ import org.json.JSONObject
  *                       "repeatUnknownCallerGuardEnabled":false,
  *                       "repeatUnknownCallerGuardThreshold":2,
  *                       "repeatUnknownCallerGuardWindowMinutes":15,
+ *                       "advancedNotification":{"scheduleEnabled":false,"default":{…},"periods":[…]},
  *                       "numberEntries":[ {"action":"allow","rawNumber":…,"origin":…} ],
  *                       "rules":[ {"type":…,"rawValue":…,"action":…,"scope":…,"userOrder":…} ]},
  *     "blockedCalls":[ {"rawNumber":…,"phoneKey":…,"blockedAt":…,"ruleType":…,"ruleValue":…} ],
  *     "myNumbers":[ {"slot":0,"number":…} ],
+ *     "outgoingCallSettings":{"enabled":true,"notifyOffNetwork":true,"notifyBlocklist":true,
+ *                              "notifyAllowlist":true,"presentation":"heads_up"},
  *     "display": {"themePref":…,"langPref":…,"fontScale":…,"smsStrip":…}
  *   } }
  * ```
@@ -66,7 +80,9 @@ import org.json.JSONObject
 object BackupManager {
 
     private const val FORMAT = "callhs-backup"
-    private const val VERSION = 4
+    private const val VERSION = 6
+    /** v4 introduced the strict, portable blocker rule contract; unrelated later versions keep it. */
+    private const val STRICT_BLOCK_SCHEMA_VERSION = 4
 
     // --- Xuất ---
 
@@ -104,6 +120,9 @@ object BackupManager {
         }
         if (BackupSection.MY_NUMBER in sections) {
             secs.put(BackupSection.MY_NUMBER.jsonKey, myNumbersToJson(MyNumberStore.exportAll(context)))
+        }
+        if (BackupSection.OUTGOING_CALL in sections) {
+            secs.put(BackupSection.OUTGOING_CALL.jsonKey, outgoingCallToJson(context))
         }
         if (BackupSection.DISPLAY in sections) {
             secs.put(BackupSection.DISPLAY.jsonKey, displayToJson(context))
@@ -164,6 +183,9 @@ object BackupManager {
             },
             myNumbers = secs.optJSONArray(BackupSection.MY_NUMBER.jsonKey)?.let { arr ->
                 runCatching { parseMyNumbers(arr) }.getOrNull()?.takeIf { it.isNotEmpty() }
+            },
+            outgoingCall = secs.optJSONObject(BackupSection.OUTGOING_CALL.jsonKey)?.let { obj ->
+                runCatching { parseOutgoingCall(obj) }.getOrNull()?.takeIf { it.hasAny }
             },
             display = secs.optJSONObject(BackupSection.DISPLAY.jsonKey)?.let { obj ->
                 runCatching { parseDisplay(obj) }.getOrNull()?.takeIf { it.hasAny }
@@ -228,6 +250,9 @@ object BackupManager {
         if (BackupSection.MY_NUMBER in sections && parsed.myNumbers != null) {
             results[BackupSection.MY_NUMBER] = MyNumberStore.restore(context, parsed.myNumbers, mode)
         }
+        if (BackupSection.OUTGOING_CALL in sections && parsed.outgoingCall != null) {
+            results[BackupSection.OUTGOING_CALL] = restoreOutgoingCall(context, parsed.outgoingCall, mode)
+        }
         if (BackupSection.DISPLAY in sections && parsed.display != null) {
             results[BackupSection.DISPLAY] = restoreDisplay(context, parsed.display, mode)
         }
@@ -249,6 +274,30 @@ object BackupManager {
             }
             d.fontScale?.let { FontScaleSettings.set(context, it) }
             d.smsStrip?.let { SmsSettings.setRemoveDiacritics(context, it) }
+        }
+        return SectionResult(updated = 1)
+    }
+
+    /** ADD giữ nguyên cấu hình hiện tại; UPDATE/REPLACE áp snapshot bằng một lần ghi nguyên tử. */
+    private suspend fun restoreOutgoingCall(
+        context: Context,
+        backup: BackupOutgoingCallConfig,
+        mode: MergeMode,
+    ): SectionResult {
+        if (mode == MergeMode.ADD) return SectionResult(skipped = 1)
+        val current = OutgoingCallSettings.read(context)
+        val presentation = backup.presentation
+            ?.let { raw -> OutgoingCallPresentation.entries.firstOrNull { it.storageKey == raw } }
+            ?: current.presentation
+        val restored = OutgoingCallConfig(
+            enabled = backup.enabled ?: current.enabled,
+            notifyOffNetwork = backup.notifyOffNetwork ?: current.notifyOffNetwork,
+            notifyBlocklist = backup.notifyBlocklist ?: current.notifyBlocklist,
+            notifyAllowlist = backup.notifyAllowlist ?: current.notifyAllowlist,
+            presentation = presentation,
+        )
+        withContext(Dispatchers.Main) {
+            OutgoingCallSettings.replace(context, restored)
         }
         return SectionResult(updated = 1)
     }
@@ -322,9 +371,39 @@ object BackupManager {
             }?.let { schedule ->
                 if (CallBlockSettings.replaceDailySchedule(context, schedule)) applied = true
             }
+            config.advancedNotification?.let { value ->
+                val restored = BlockNotificationAdvancedConfig(
+                    defaultAlert = value.defaultAlert.toNotificationAlert(),
+                    scheduleEnabled = value.scheduleEnabled,
+                    periods = value.periods.map { period ->
+                        BlockNotificationPeriodSettings(
+                            period = requireNotNull(
+                                BlockNotificationPeriod.entries.firstOrNull {
+                                    it.storageKey == period.period
+                                }
+                            ),
+                            enabled = period.enabled,
+                            alert = period.alert.toNotificationAlert(),
+                        )
+                    },
+                )
+                if (CallBlockNotificationSettings.replace(context, restored)) applied = true
+            }
         }
         return if (applied) SectionResult(updated = 1) else SectionResult(skipped = 1)
     }
+
+    private fun BackupBlockNotificationAlert.toNotificationAlert(): BlockNotificationAlert =
+        BlockNotificationAlert(
+            soundEnabled = soundEnabled,
+            vibrationEnabled = vibrationEnabled,
+            sound = BlockNotificationSound.preset(
+                requireNotNull(BlockNotificationSoundPreset.fromStorage(soundPreset))
+            ),
+            presentation = requireNotNull(
+                BlockNotificationPresentation.entries.firstOrNull { it.storageKey == presentation }
+            ),
+        )
 
     // --- JSON: mã hoá ---
 
@@ -430,9 +509,40 @@ object BackupManager {
             .put("repeatUnknownCallerGuardThreshold", repeatGuard.threshold)
             .put("repeatUnknownCallerGuardWindowMinutes", repeatGuard.windowMinutes)
             .put("dailySchedule", dailySchedule)
+            .put(
+                "advancedNotification",
+                blockNotificationToJson(CallBlockNotificationSettings.read(context)),
+            )
             .put("numberEntries", entriesJson)
             .put("rules", arr)
     }
+
+    private fun blockNotificationToJson(config: BlockNotificationAdvancedConfig): JSONObject =
+        JSONObject()
+            .put("scheduleEnabled", config.scheduleEnabled)
+            .put("default", blockNotificationAlertToJson(config.defaultAlert))
+            .put(
+                "periods",
+                JSONArray().apply {
+                    config.periods.forEach { value ->
+                        put(
+                            JSONObject()
+                                .put("period", value.period.storageKey)
+                                .put("enabled", value.enabled)
+                                .put("alert", blockNotificationAlertToJson(value.alert))
+                        )
+                    }
+                },
+            )
+
+    private fun blockNotificationAlertToJson(alert: BlockNotificationAlert): JSONObject =
+        JSONObject()
+            .put("soundEnabled", alert.soundEnabled)
+            .put("vibrationEnabled", alert.vibrationEnabled)
+            // A SAF content URI and its persisted grant belong to one Android installation.
+            // Back up a safe packaged sound so a transfer never restores an unreadable URI.
+            .put("soundPreset", (alert.sound.preset ?: BlockNotificationSoundPreset.PULSE).storageKey)
+            .put("presentation", alert.presentation.storageKey)
 
     private fun blockedCallsToJson(list: List<BackupBlockedCall>): JSONArray {
         val arr = JSONArray()
@@ -462,6 +572,16 @@ object BackupManager {
         .put("langPref", LanguageSettings.pref.name)
         .put("fontScale", FontScaleSettings.scale.toDouble())
         .put("smsStrip", SmsSettings.isRemoveDiacritics(context))
+
+    private fun outgoingCallToJson(context: Context): JSONObject {
+        val config = OutgoingCallSettings.read(context)
+        return JSONObject()
+            .put("enabled", config.enabled)
+            .put("notifyOffNetwork", config.notifyOffNetwork)
+            .put("notifyBlocklist", config.notifyBlocklist)
+            .put("notifyAllowlist", config.notifyAllowlist)
+            .put("presentation", config.presentation.storageKey)
+    }
 
     // --- JSON: giải mã ---
 
@@ -514,7 +634,7 @@ object BackupManager {
             val rawValue = rule.optString("rawValue")
             if (type.isBlank() || rawValue.isBlank()) return@mapNotNull null
             val enabled = rule.optBooleanOrNull("enabled")
-                ?: if (sourceVersion < VERSION && !rule.has("enabled")) true else return@mapNotNull null
+                ?: if (sourceVersion < STRICT_BLOCK_SCHEMA_VERSION && !rule.has("enabled")) true else return@mapNotNull null
             BackupBlockRule(
                 type = type,
                 rawValue = rawValue,
@@ -522,9 +642,9 @@ object BackupManager {
                 enabled = enabled,
                 createdAt = rule.optLong("createdAt"),
                 action = rule.optStringOrNull("action")
-                    ?: if (sourceVersion < VERSION) CallBlockAction.BLOCK.storageKey else return@mapNotNull null,
+                    ?: if (sourceVersion < STRICT_BLOCK_SCHEMA_VERSION) CallBlockAction.BLOCK.storageKey else return@mapNotNull null,
                 scope = rule.optStringOrNull("scope")
-                    ?: if (sourceVersion < VERSION) CallBlockScope.ALL_VISIBLE_NUMBERS.storageKey else return@mapNotNull null,
+                    ?: if (sourceVersion < STRICT_BLOCK_SCHEMA_VERSION) CallBlockScope.ALL_VISIBLE_NUMBERS.storageKey else return@mapNotNull null,
                 userOrder = rule.optIntOrNull("userOrder")?.coerceAtLeast(0) ?: i,
             )
         }
@@ -536,7 +656,7 @@ object BackupManager {
             val phoneKey = PhoneKey.of(rawNumber)
             if (rawNumber.isBlank() || phoneKey.length < 3) return@mapNotNull null
             val enabled = entry.optBooleanOrNull("enabled")
-                ?: if (sourceVersion < VERSION && !entry.has("enabled")) true else return@mapNotNull null
+                ?: if (sourceVersion < STRICT_BLOCK_SCHEMA_VERSION && !entry.has("enabled")) true else return@mapNotNull null
             BackupNumberEntry(
                 action = action.storageKey,
                 rawNumber = rawNumber,
@@ -550,7 +670,7 @@ object BackupManager {
         }
         // v4 is authoritative app-owned data. Reject the whole section if any item is malformed so
         // REPLACE can never erase valid local data after partially accepting a damaged payload.
-        if (sourceVersion >= VERSION) {
+        if (sourceVersion >= STRICT_BLOCK_SCHEMA_VERSION) {
             require(
                 parsedRules.size == rulesArr.length() &&
                     parsedRules.all {
@@ -567,7 +687,7 @@ object BackupManager {
             sourceVersion = sourceVersion,
         )
         val guardEnabled = obj.optBooleanOrNull("repeatUnknownCallerGuardEnabled")
-        if (sourceVersion >= VERSION) {
+        if (sourceVersion >= STRICT_BLOCK_SCHEMA_VERSION) {
             val activeGroupRules = rules.filter { rule ->
                 rule.enabled && rule.type == CallBlockRuleType.ANY.storageKey &&
                     rule.scope in setOf(
@@ -631,6 +751,9 @@ object BackupManager {
             )
             windows
         }
+        val advancedNotificationObject = obj.optJSONObject("advancedNotification")
+        if (obj.has("advancedNotification") && advancedNotificationObject == null) require(false)
+        val advancedNotification = advancedNotificationObject?.let(::parseBlockNotification)
         return BackupBlockConfig(
             enabled = if (legacyAllow) false else obj.optBooleanOrNull("enabled"),
             notificationMode = notificationMode,
@@ -641,7 +764,7 @@ object BackupManager {
             numberEntries = numberEntries,
             // v4 scope replaces this global bypass. Keep an explicit v1-v3 value only long enough
             // for restore to add/remove the equivalent group policy; v4 never exports this field.
-            allowSavedContactsEnabled = if (sourceVersion < VERSION) {
+            allowSavedContactsEnabled = if (sourceVersion < STRICT_BLOCK_SCHEMA_VERSION) {
                 obj.optBooleanOrNull("allowSavedContactsEnabled")
             } else {
                 null
@@ -654,6 +777,56 @@ object BackupManager {
                 .optIntOrNull("repeatUnknownCallerGuardWindowMinutes")
                 ?.takeIf(CallBlockSettings::isValidRepeatUnknownCallerGuardWindowMinutes),
             dailySchedule = parsedSchedule,
+            advancedNotification = advancedNotification,
+        )
+    }
+
+    private fun parseBlockNotification(obj: JSONObject): BackupBlockNotificationConfig {
+        val defaultAlert = obj.optJSONObject("default")
+            ?.let(::parseBlockNotificationAlert)
+            ?: error("Missing advanced notification default alert")
+        val periodsArray = obj.optJSONArray("periods")
+            ?: error("Missing advanced notification periods")
+        val periods = (0 until periodsArray.length()).map { index ->
+            val value = periodsArray.optJSONObject(index)
+                ?: error("Invalid advanced notification period")
+            val period = value.optStringOrNull("period")
+                ?.let { raw -> BlockNotificationPeriod.entries.firstOrNull { it.storageKey == raw } }
+                ?: error("Unknown advanced notification period")
+            BackupBlockNotificationPeriod(
+                period = period.storageKey,
+                enabled = value.optBooleanOrNull("enabled")
+                    ?: error("Missing advanced notification period state"),
+                alert = value.optJSONObject("alert")
+                    ?.let(::parseBlockNotificationAlert)
+                    ?: error("Missing advanced notification period alert"),
+            )
+        }
+        require(periods.map(BackupBlockNotificationPeriod::period).toSet().size == periods.size)
+        require(periods.map(BackupBlockNotificationPeriod::period).toSet() ==
+            BlockNotificationPeriod.entries.map(BlockNotificationPeriod::storageKey).toSet())
+        return BackupBlockNotificationConfig(
+            scheduleEnabled = obj.optBooleanOrNull("scheduleEnabled")
+                ?: error("Missing advanced notification schedule state"),
+            defaultAlert = defaultAlert,
+            periods = periods,
+        )
+    }
+
+    private fun parseBlockNotificationAlert(obj: JSONObject): BackupBlockNotificationAlert {
+        val soundPreset = obj.optStringOrNull("soundPreset")
+            ?.let { raw -> BlockNotificationSoundPreset.entries.firstOrNull { it.storageKey == raw } }
+            ?: error("Unknown advanced notification sound")
+        val presentation = obj.optStringOrNull("presentation")
+            ?.let { raw -> BlockNotificationPresentation.entries.firstOrNull { it.storageKey == raw } }
+            ?: error("Unknown advanced notification presentation")
+        return BackupBlockNotificationAlert(
+            soundEnabled = obj.optBooleanOrNull("soundEnabled")
+                ?: error("Missing advanced notification sound state"),
+            vibrationEnabled = obj.optBooleanOrNull("vibrationEnabled")
+                ?: error("Missing advanced notification vibration state"),
+            soundPreset = soundPreset.storageKey,
+            presentation = presentation.storageKey,
         )
     }
 
@@ -663,7 +836,7 @@ object BackupManager {
         savedContactsWereAllowed: Boolean,
         sourceVersion: Int,
     ): Pair<List<BackupNumberEntry>, List<BackupBlockRule>> {
-        if (sourceVersion >= VERSION) {
+        if (sourceVersion >= STRICT_BLOCK_SCHEMA_VERSION) {
             return emptyList<BackupNumberEntry>() to adaptRetiredSpecialV4Rules(rules)
         }
         val entries = ArrayList<BackupNumberEntry>()
@@ -940,6 +1113,18 @@ object BackupManager {
         } else null,
         smsStrip = if (o.has("smsStrip") && !o.isNull("smsStrip")) o.optBoolean("smsStrip") else null,
     )
+
+    private fun parseOutgoingCall(o: JSONObject): BackupOutgoingCallConfig {
+        val presentation = o.optStringOrNull("presentation")
+            ?.takeIf { raw -> OutgoingCallPresentation.entries.any { it.storageKey == raw } }
+        return BackupOutgoingCallConfig(
+            enabled = o.optBooleanOrNull("enabled"),
+            notifyOffNetwork = o.optBooleanOrNull("notifyOffNetwork"),
+            notifyBlocklist = o.optBooleanOrNull("notifyBlocklist"),
+            notifyAllowlist = o.optBooleanOrNull("notifyAllowlist"),
+            presentation = presentation,
+        )
+    }
 
     private fun JSONObject.optStringOrNull(key: String): String? =
         if (has(key) && !isNull(key)) optString(key).takeIf { it.isNotBlank() } else null
