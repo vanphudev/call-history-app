@@ -35,20 +35,22 @@ object OutgoingCallAlertDispatcher {
         createdAtMillis: Long,
         source: OutgoingCallEventSource,
     ) {
-        val number = outgoingNumber(handle) ?: return
         val appContext = context.applicationContext
-        val config = runCatching { OutgoingCallSettings.read(appContext) }
-            .onFailure { Log.e(LOG_TAG, "Unable to read outgoing-call settings", it) }
-            .getOrNull()
-            ?: return
-        if (!config.enabled || !config.hasEnabledCondition) return
-        val startedAt = SystemClock.elapsedRealtime()
-        if (!claimCallback(number, startedAt)) {
-            Log.i(LOG_TAG, "Ignoring duplicate callback from $source")
-            return
-        }
-
+        // Keep the caller (especially Telecom/BroadcastReceiver main threads) enqueue-only. Even
+        // parsing a URI or the first SharedPreferences read can stall during a cold process start.
         scope.launch {
+            val startedAt = SystemClock.elapsedRealtime()
+            val number = outgoingNumber(handle) ?: return@launch
+            val config = runCatching { OutgoingCallSettings.read(appContext) }
+                .onFailure { Log.e(LOG_TAG, "Unable to read outgoing-call settings", it) }
+                .getOrNull()
+                ?: return@launch
+            if (!config.enabled || !config.hasEnabledCondition) return@launch
+            if (!claimCallback(number, startedAt)) {
+                Log.i(LOG_TAG, "Ignoring duplicate callback from $source")
+                return@launch
+            }
+
             runCatching { LanguageSettings.init(appContext) }
                 .onFailure { Log.w(LOG_TAG, "Unable to load app language", it) }
 

@@ -175,7 +175,9 @@ object OutgoingCallOverlay {
         val manager = attachedWindowManager.get()
         attachedView.clear()
         attachedWindowManager.clear()
-        runCatching { manager?.removeViewImmediate(view) }
+        // Synchronous removeViewImmediate can hold the app main thread behind an OEM
+        // WindowManager transaction while Telecom is starting the in-call UI.
+        runCatching { manager?.removeView(view) }
     }
 
     private fun roundedBackground(color: Int, radius: Float) = GradientDrawable().apply {

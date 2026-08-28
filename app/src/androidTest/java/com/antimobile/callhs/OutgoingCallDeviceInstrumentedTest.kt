@@ -3,6 +3,7 @@ package com.antimobile.callhs
 import android.Manifest
 import android.app.NotificationManager
 import android.app.role.RoleManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -22,7 +23,9 @@ import com.antimobile.callhs.data.outgoing.OutgoingCallConfig
 import com.antimobile.callhs.data.outgoing.OutgoingCallEventSource
 import com.antimobile.callhs.data.outgoing.OutgoingCallNotifier
 import com.antimobile.callhs.data.outgoing.OutgoingCallOverlay
+import com.antimobile.callhs.data.outgoing.OutgoingCallPostResponseReceiver
 import com.antimobile.callhs.data.outgoing.OutgoingCallPresentation
+import com.antimobile.callhs.data.outgoing.OutgoingCallRedirectionService
 import com.antimobile.callhs.data.outgoing.OutgoingCallRole
 import com.antimobile.callhs.data.outgoing.OutgoingCallSettings
 import com.antimobile.callhs.data.outgoing.OutgoingNumberList
@@ -30,6 +33,7 @@ import com.antimobile.callhs.util.Carrier
 import com.antimobile.callhs.util.SimInfo
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -40,6 +44,24 @@ import org.junit.runner.RunWith
 class OutgoingCallDeviceInstrumentedTest {
     private val context: Context
         get() = ApplicationProvider.getApplicationContext()
+
+    @Test
+    fun telecomFastPathIsIsolatedAndPostWorkReturnsToMainAppProcess() {
+        val packageManager = context.packageManager
+        val service = packageManager.getServiceInfo(
+            ComponentName(context, OutgoingCallRedirectionService::class.java),
+            PackageManager.GET_META_DATA,
+        )
+        val receiver = packageManager.getReceiverInfo(
+            ComponentName(context, OutgoingCallPostResponseReceiver::class.java),
+            PackageManager.GET_META_DATA,
+        )
+
+        assertEquals("${context.packageName}:call_redirection", service.processName)
+        assertTrue(service.exported)
+        assertEquals(context.packageName, receiver.processName)
+        assertFalse(receiver.exported)
+    }
 
     @Test
     fun deviceHasDedicatedRoleAndPhonePermission() {
