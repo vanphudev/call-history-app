@@ -1,7 +1,6 @@
 package com.antimobile.callhs.data.outgoing
 
 import android.net.Uri
-import android.os.SystemClock
 import android.telecom.CallRedirectionService
 import android.telecom.PhoneAccountHandle
 import android.util.Log
@@ -16,26 +15,26 @@ class OutgoingCallRedirectionService : CallRedirectionService() {
         initialPhoneAccount: PhoneAccountHandle,
         allowInteractiveResponse: Boolean,
     ) {
-        val startedAt = SystemClock.elapsedRealtime()
-        // This feature is observational only. Never turn an exceptional framework response into an
-        // explicit cancellation of the user's call; Telecom owns its own timeout/error handling.
-        runCatching { placeCallUnmodified() }
-            .onFailure { error ->
-                Log.e(LOG_TAG, "Unable to release outgoing call unchanged", error)
-            }
+        // Keep this as the first executable statement. Telecom cancels the user's outgoing call if
+        // its redirection adapter does not receive a response within five seconds.
+        try {
+            placeCallUnmodified()
+        } catch (error: RuntimeException) {
+            Log.e(LOG_TAG, "Unable to release outgoing call unchanged", error)
+            return
+        }
 
-        OutgoingCallAlertDispatcher.onOutgoingCall(
+        // Everything observational is handed to the default app process only after Telecom has
+        // accepted the unchanged call. Settings and Room must not be read in this lightweight process.
+        OutgoingCallPostResponseReceiver.enqueue(
             context = applicationContext,
             handle = handle,
             phoneAccount = initialPhoneAccount,
-            createdAtMillis = System.currentTimeMillis(),
-            source = OutgoingCallEventSource.REDIRECTION,
         )
-        Log.i(
-            LOG_TAG,
-            "Outgoing callback released in ${SystemClock.elapsedRealtime() - startedAt} ms; " +
-                "interactive=$allowInteractiveResponse",
-        )
+    }
+
+    override fun onRedirectionTimeout() {
+        Log.e(LOG_TAG, "Telecom timed out before receiving the unchanged-call response")
     }
 
     private companion object {
