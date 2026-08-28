@@ -9,6 +9,9 @@
         <exclude domain="sharedpref" path="call_block_repeat_unknown_attempts.xml.bak" />
         <exclude domain="sharedpref" path="call_block_repeat_unknown_guard_attempts.xml" />
         <exclude domain="sharedpref" path="call_block_repeat_unknown_guard_attempts.xml.bak" />
+        <exclude domain="database" path="callhs-messaging-private.db" />
+        <exclude domain="database" path="callhs-messaging-private.db-wal" />
+        <exclude domain="database" path="callhs-messaging-private.db-shm" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="sharedpref" path="call_block_runtime_state.xml" />
@@ -17,5 +20,8 @@
         <exclude domain="sharedpref" path="call_block_repeat_unknown_attempts.xml.bak" />
         <exclude domain="sharedpref" path="call_block_repeat_unknown_guard_attempts.xml" />
         <exclude domain="sharedpref" path="call_block_repeat_unknown_guard_attempts.xml.bak" />
+        <exclude domain="database" path="callhs-messaging-private.db" />
+        <exclude domain="database" path="callhs-messaging-private.db-wal" />
+        <exclude domain="database" path="callhs-messaging-private.db-shm" />
     </device-transfer>
 </data-extraction-rules>

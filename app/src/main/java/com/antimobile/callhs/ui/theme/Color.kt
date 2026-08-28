@@ -71,3 +71,9 @@ val ChipSelectedBg: Color get() = ThemeSettings.colors.chipSelectedBg
 val ChipSelectedText: Color get() = ThemeSettings.colors.chipSelectedText
 val ChipBg: Color get() = ThemeSettings.colors.chipBg
 val ChipText: Color get() = ThemeSettings.colors.chipText
+
+// ---- Bong bóng SMS ----
+val MessageOutgoingBubble: Color get() = ThemeSettings.colors.messageOutgoingBubble
+val MessageIncomingBubble: Color get() = ThemeSettings.colors.messageIncomingBubble
+val MessageOutgoingText: Color get() = ThemeSettings.colors.messageOutgoingText
+val MessageIncomingText: Color get() = ThemeSettings.colors.messageIncomingText

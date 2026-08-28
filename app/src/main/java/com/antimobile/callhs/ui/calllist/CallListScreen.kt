@@ -55,6 +55,8 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -83,6 +85,7 @@ import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Today
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Work
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -98,6 +101,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -142,6 +147,11 @@ import com.antimobile.callhs.data.model.CallEntry
 import com.antimobile.callhs.ui.category.CategoryGlyph
 import com.antimobile.callhs.ui.category.categoryGlyph
 import com.antimobile.callhs.ui.category.categoryLabel
+import com.antimobile.callhs.ui.home.HomeTab
+import com.antimobile.callhs.ui.home.HomeTabSwitcher
+import com.antimobile.callhs.ui.messaging.ConversationListPage
+import com.antimobile.callhs.ui.messaging.ConversationListViewModel
+import com.antimobile.callhs.data.messaging.model.ConversationSummary
 import com.antimobile.callhs.util.PhoneKey
 import com.antimobile.callhs.data.model.CallType
 import com.antimobile.callhs.i18n.LanguageSettings
@@ -210,6 +220,11 @@ internal sealed interface Row2 {
 @Composable
 fun CallListScreen(
     vm: CallListViewModel,
+    messagingVm: ConversationListViewModel,
+    homeTab: HomeTab,
+    onSelectHomeTab: (HomeTab) -> Unit,
+    onOpenConversation: (ConversationSummary) -> Unit,
+    onNewMessage: () -> Unit,
     onOpenNumber: (String) -> Unit,
     onOpenContacts: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -308,6 +323,7 @@ fun CallListScreen(
     }
 
     var query by remember { mutableStateOf("") }
+    var messageQuery by remember { mutableStateOf("") }
     var searchActive by remember { mutableStateOf(false) }
     // Bộ lọc + kiểu hiển thị được LƯU LẠI (SharedPreferences) → mở app lần sau giữ nguyên lựa chọn.
     val prefs = remember { context.getSharedPreferences("call_list_prefs", Context.MODE_PRIVATE) }
@@ -386,6 +402,16 @@ fun CallListScreen(
     // Hoist trạng thái cuộn của danh sách RA NGOÀI khối `when` → giữ NGUYÊN vị trí cuộn khi swap qua lại
     // giữa danh sách và lịch sử tìm kiếm (LazyColumn bị dispose lúc hiện lịch sử vẫn không mất vị trí).
     val listState = rememberLazyListState()
+    val pagerState = rememberPagerState(initialPage = homeTab.ordinal) { HomeTab.entries.size }
+    val latestSelectTab by rememberUpdatedState(onSelectHomeTab)
+    LaunchedEffect(homeTab) {
+        if (pagerState.settledPage != homeTab.ordinal) pagerState.animateScrollToPage(homeTab.ordinal)
+    }
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.settledPage }.collect { page ->
+            latestSelectTab(HomeTab.entries[page])
+        }
+    }
     // ---- Nút "LÊN ĐẦU" (kính mờ) — hiện khi đã cuộn xuống, đặt ngay TRÊN nút FAB ----
     val scrollScope = rememberCoroutineScope()
     // Ảnh chụp (record) nội dung danh sách vào lớp đồ hoạ này để nút vẽ lại vùng nền BÊN DƯỚI ở dạng BLUR.
@@ -397,11 +423,14 @@ fun CallListScreen(
     // Đóng màn tìm kiếm (dùng cho CẢ nút X lẫn nút BACK): CHỈ reset, KHÔNG lưu lịch sử — tránh nhét truy vấn
     // gõ dở mà người dùng CHỦ ĐỘNG huỷ vào "tìm gần đây". Lịch sử chỉ lưu khi xác nhận thật (phím ✓ / chạm kết quả).
     val closeSearch: () -> Unit = {
-        searchActive = false; searchFocused = false; query = ""; focusManager.clearFocus()
+        searchActive = false
+        searchFocused = false
+        if (homeTab == HomeTab.CALLS) query = "" else messageQuery = ""
+        focusManager.clearFocus()
     }
     // Nút xác nhận trên bàn phím → NHẢ FOCUS HẲN (như chạm ngoài, con trỏ tắt) + lưu lịch sử nếu có từ khoá.
     val onImeAction: () -> Unit = {
-        if (query.isNotBlank()) commitSearch(query)
+        if (homeTab == HomeTab.CALLS && query.isNotBlank()) commitSearch(query)
         focusManager.clearFocus()
     }
     // Đang tìm kiếm → nút BACK ĐÓNG search (quay về màn chính) thay vì thoát app.
@@ -411,7 +440,9 @@ fun CallListScreen(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         val spoken = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
-        if (!spoken.isNullOrBlank()) query = spoken
+        if (!spoken.isNullOrBlank()) {
+            if (homeTab == HomeTab.CALLS) query = spoken else messageQuery = spoken
+        }
     }
 
     // Context-menu khi nhấn giữ item — dựng ở GỐC (ngoài inset) để nền tối phủ TRỌN màn hình.
@@ -466,9 +497,16 @@ fun CallListScreen(
         ) {
 
             TopBar(
+                homeTab = homeTab,
+                onSelectHomeTab = { tab ->
+                    searchActive = false
+                    searchFocused = false
+                    focusManager.clearFocus()
+                    onSelectHomeTab(tab)
+                },
                 searchActive = searchActive,
-                query = query,
-                onQueryChange = { query = it },
+                query = if (homeTab == HomeTab.CALLS) query else messageQuery,
+                onQueryChange = { value -> if (homeTab == HomeTab.CALLS) query = value else messageQuery = value },
                 onOpenSearch = { searchActive = true },
                 onCloseSearch = closeSearch,
                 onFocusChanged = { searchFocused = it },
@@ -488,7 +526,8 @@ fun CallListScreen(
                 onSettings = onOpenSettings
             )
 
-            if (hasPerm && !searchActive) {
+            AnimatedVisibility(visible = homeTab == HomeTab.CALLS && hasPerm && !searchActive) {
+                Column {
                 // Hàng 1: NÚT LỌC (mở bottom sheet chọn loại) + THANH chế độ xem (text, cùng cỡ/bo góc).
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
@@ -545,6 +584,7 @@ fun CallListScreen(
                         allowLabel = if (contactsPermanentlyDenied) s.common.openSettings else s.common.grantPermission
                     )
                 }
+                }
             }
 
             Box(
@@ -554,7 +594,20 @@ fun CallListScreen(
                     // Chạm ra vùng trống (ngoài ô nhập) → ẩn bàn phím; item con vẫn nhận chạm bình thường.
                     .pointerInput(Unit) { detectTapGestures { focusManager.clearFocus() } }
             ) {
-                when {
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize(),
+                    userScrollEnabled = !searchActive,
+                    key = { HomeTab.entries[it].name },
+                ) { page ->
+                if (HomeTab.entries[page] == HomeTab.MESSAGES) {
+                    ConversationListPage(
+                        vm = messagingVm,
+                        query = messageQuery,
+                        onOpenConversation = onOpenConversation,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else when {
                     !hasPerm -> PermissionState(
                         onRequest = requestCallLogPermission,
                         buttonLabel = if (permPermanentlyDenied) s.common.openSettings else s.common.allowAccess
@@ -638,17 +691,18 @@ fun CallListScreen(
                         }
                     }
                 }
+                }
             }
         }
 
         // FAB ẩn khi đang TÌM KIẾM: tránh bị bàn phím đẩy lên (cộng dồn cả nav bar nhìn xa/xấu) & gọn màn tìm.
-        if (hasPerm && !searchActive) {
+        if (!searchActive && (homeTab == HomeTab.MESSAGES || hasPerm)) {
             val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
             // Nút "LÊN ĐẦU" — kính mờ xám, icon trắng; NGAY TRÊN FAB (căn giữa theo trục FAB, cách 12.dp).
             // Hiện/ẩn mượt bằng fade + scale khi cuộn xuống/lên. Nền mờ lấy từ backdropLayer đã ghi ở Column.
             AnimatedVisibility(
-                visible = showScrollTop,
+                visible = homeTab == HomeTab.CALLS && showScrollTop,
                 enter = fadeIn() + scaleIn(initialScale = 0.7f),
                 exit = fadeOut() + scaleOut(targetScale = 0.7f),
                 modifier = Modifier
@@ -671,16 +725,24 @@ fun CallListScreen(
                     .size(60.dp)
                     .clip(CircleShape)
                     .background(Primary)
-                    .clickable { CallActions.openDialer(context) },
+                    .clickable {
+                        if (homeTab == HomeTab.CALLS) CallActions.openDialer(context)
+                        else onNewMessage()
+                    },
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Rounded.Dialpad, contentDescription = s.callList.dialpad, tint = Color.White, modifier = Modifier.size(26.dp))
+                Icon(
+                    if (homeTab == HomeTab.CALLS) Icons.Rounded.Dialpad else Icons.Rounded.Edit,
+                    contentDescription = if (homeTab == HomeTab.CALLS) s.callList.dialpad else s.messaging.newMessage,
+                    tint = Color.White,
+                    modifier = Modifier.size(26.dp),
+                )
             }
         }
     }
 
         // Lớp phủ context-menu (nhấn giữ) — nằm trong Box GỐC nên phủ trọn màn, trên cả FAB.
-        contextTarget?.let { tgt ->
+        if (homeTab == HomeTab.CALLS) contextTarget?.let { tgt ->
             CallContextMenuOverlay(
                 target = tgt,
                 topInsetPx = statusBarPx,
@@ -821,6 +883,8 @@ internal fun buildRows(
 
 @Composable
 private fun TopBar(
+    homeTab: HomeTab,
+    onSelectHomeTab: (HomeTab) -> Unit,
     searchActive: Boolean,
     query: String,
     onQueryChange: (String) -> Unit,
@@ -883,17 +947,10 @@ private fun TopBar(
             modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 6.dp, top = 12.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = s.callList.title,
-                style = MaterialTheme.typography.headlineSmall,
-                color = TextPrimary,
-                // Tiêu đề 1 dòng; khi thêm nút QR làm bề ngang không đủ hiển thị đủ chữ thì CHẠY vòng (phải→trái)
-                // liên tục thay vì bị cắt cụt. Đủ chỗ thì đứng yên như thường.
-                maxLines = 1,
-                softWrap = false,
-                modifier = Modifier
-                    .weight(1f)
-                    .basicMarquee(iterations = Int.MAX_VALUE)
+            HomeTabSwitcher(
+                selected = homeTab,
+                onSelect = onSelectHomeTab,
+                modifier = Modifier.weight(1f),
             )
             RoundIconButton(Icons.Rounded.QrCodeScanner, s.qr.scan, TextSecondary, onScanQr)
             RoundIconButton(Icons.Rounded.Contacts, s.common.contacts, TextSecondary, onContacts)

@@ -100,7 +100,7 @@ private data class PermissionStep(
 )
 
 /**
- * BA quyền BẮT BUỘC, xin lần lượt theo thứ tự rõ ràng trước khi vào ứng dụng:
+ * Nội dung onboarding quyền cũ được giữ làm component tham chiếu cho các màn xin quyền theo tính năng:
  * 1) Nhật ký cuộc gọi (READ_CALL_LOG) → 2) Thông tin SIM (READ_PHONE_STATE) → 3) Danh bạ (READ_CONTACTS).
  * Mỗi bước có nội dung giải thích chi tiết + trấn an quyền riêng.
  */
@@ -146,68 +146,24 @@ private fun requiredSteps(): List<PermissionStep> = with(appStrings().permission
 }
 
 /**
- * Cổng quyền BẮT BUỘC: chỉ hiển thị [content] (toàn bộ ứng dụng) khi đã cấp ĐỦ 3 quyền; nếu còn thiếu
- * thì hiện màn xin quyền cho quyền ĐẦU TIÊN chưa cấp (theo thứ tự), lần lượt cho tới khi đủ.
- *
- * Ghi chú: quyền bị thu hồi khi app đang chạy sẽ khiến hệ thống khởi động lại tiến trình → mở lại app
- * là cổng này chạy lại từ đầu, nên các màn bên trong luôn chắc chắn đã có quyền.
+ * Cổng đồng ý điều khoản. Sau bước này ứng dụng luôn mở được; mỗi tab tự kiểm tra và xin đúng quyền cần dùng,
+ * nhờ đó từ chối Call Log không khóa SMS và từ chối Danh bạ không khóa các số chưa lưu.
  */
 @Composable
 fun PermissionGate(content: @Composable () -> Unit) {
     val context = LocalContext.current
-    val activity = remember { context.findActivity() }
-    val steps = requiredSteps()
-
-    fun snapshot() = steps.map { hasPermission(context, it.permission) }
-    var granted by remember { mutableStateOf(snapshot()) }
-    // Đồng ý điều khoản = BƯỚC CUỐI (sau 3 quyền). Đã đồng ý thì lưu vĩnh viễn, các lần mở sau bỏ qua.
     var consented by remember { mutableStateOf(ConsentStore.isAccepted(context)) }
-    val currentIndex = granted.indexOfFirst { !it } // -1 = đã đủ 3 quyền
-    val totalSteps = steps.size + 1                  // 3 quyền + 1 bước đồng ý điều khoản
-
-    // deniedOnce theo TỪNG bước (reset khi chuyển bước) — chỉ sau khi bị từ chối mới xét "từ chối vĩnh viễn".
-    var deniedOnce by remember(currentIndex) { mutableStateOf(false) }
-
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
-        granted = snapshot()
-        if (!isGranted) deniedOnce = true
-    }
-
-    // Quay lại từ Cài đặt / mở lại app → cập nhật lại trạng thái quyền.
-    LifecycleEventEffect(Lifecycle.Event.ON_START) { granted = snapshot() }
-
-    // Đã đủ 3 quyền: nếu CHƯA đồng ý điều khoản → BƯỚC CUỐI; đồng ý rồi mới vào ứng dụng.
-    if (currentIndex < 0) {
-        if (consented) {
-            content()
-        } else {
-            ConsentStepScreen(
-                stepNumber = totalSteps,
-                totalSteps = totalSteps,
-                onOpenTerms = { AppLinks.openUrl(context, AppLinks.TERMS_URL) },
-                onOpenPrivacy = { AppLinks.openUrl(context, AppLinks.PRIVACY_URL) },
-                onAccepted = {
-                    ConsentStore.accept(context)
-                    consented = true
-                }
-            )
-        }
-        return
-    }
-
-    val step = steps[currentIndex]
-    val permanentlyDenied = deniedOnce && activity != null &&
-        !ActivityCompat.shouldShowRequestPermissionRationale(activity, step.permission)
-
-    PermissionStepScreen(
-        step = step,
-        stepNumber = currentIndex + 1,
-        totalSteps = totalSteps,
-        permanentlyDenied = permanentlyDenied,
-        onGrant = {
-            if (permanentlyDenied) context.openAppSettings()
-            else launcher.launch(step.permission)
-        }
+    // Quyền nhạy cảm nay được xin THEO TÍNH NĂNG: Call Log ở tab Cuộc gọi, ROLE_SMS + nhóm SMS ở tab
+    // Nhắn tin, Danh bạ khi người dùng cần tên/ảnh. Không khóa toàn app chỉ vì một tính năng bị từ chối.
+    if (consented) content() else ConsentStepScreen(
+        stepNumber = 1,
+        totalSteps = 1,
+        onOpenTerms = { AppLinks.openUrl(context, AppLinks.TERMS_URL) },
+        onOpenPrivacy = { AppLinks.openUrl(context, AppLinks.PRIVACY_URL) },
+        onAccepted = {
+            ConsentStore.accept(context)
+            consented = true
+        },
     )
 }
 

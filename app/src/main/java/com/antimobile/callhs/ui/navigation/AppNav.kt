@@ -7,6 +7,13 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -24,8 +31,16 @@ import com.antimobile.callhs.ui.calldetail.CallDetailScreen
 import com.antimobile.callhs.ui.calldetail.CallDetailViewModel
 import com.antimobile.callhs.ui.callhistory.AllCallsScreen
 import com.antimobile.callhs.ui.timeline.TimelineScreen
-import com.antimobile.callhs.ui.calllist.CallListScreen
 import com.antimobile.callhs.ui.calllist.CallListViewModel
+import com.antimobile.callhs.data.messaging.role.SmsRole
+import com.antimobile.callhs.data.messaging.model.MessagingLaunch
+import com.antimobile.callhs.ui.home.HomeScreen
+import com.antimobile.callhs.ui.home.HomeTab
+import com.antimobile.callhs.ui.messaging.ConversationListViewModel
+import com.antimobile.callhs.ui.messaging.ConversationScreen
+import com.antimobile.callhs.ui.messaging.ConversationViewModel
+import com.antimobile.callhs.ui.messaging.NewMessageScreen
+import com.antimobile.callhs.ui.messaging.NewMessageViewModel
 import com.antimobile.callhs.ui.category.CategoryEditorScreen
 import com.antimobile.callhs.ui.category.CategoryEditorViewModel
 import com.antimobile.callhs.ui.category.CategoryListScreen
@@ -64,6 +79,8 @@ import com.antimobile.callhs.ui.settings.ThemeScreen
 import com.antimobile.callhs.ui.outgoing.OutgoingCallSettingsScreen
 import com.antimobile.callhs.ui.stats.DetailedStatsScreen
 import com.antimobile.callhs.ui.stats.DetailedStatsViewModel
+import com.antimobile.callhs.ui.components.AppToastType
+import com.antimobile.callhs.util.CallActions
 
 private object Routes {
     const val LIST = "list"
@@ -102,16 +119,43 @@ private object Routes {
     const val CALL_BLOCK_ADVANCED = "callblock/advanced"
     const val CALL_BLOCK_COMMON_ISSUES = "callblock/common-issues"
     const val DONATE = "donate"
+    const val MESSAGE_THREAD = "messages/thread"
+    const val MESSAGE_NEW = "messages/new"
 }
 
 @Composable
-fun AppNav() {
+fun AppNav(
+    messagingLaunch: MessagingLaunch? = null,
+    onMessagingLaunchConsumed: (Long) -> Unit = {},
+) {
+    val context = LocalContext.current
     val nav = rememberNavController()
     val listVm: CallListViewModel = viewModel()
+    val messagingVm: ConversationListViewModel = viewModel()
+    val conversationVm: ConversationViewModel = viewModel()
+    val newMessageVm: NewMessageViewModel = viewModel()
     val detailVm: CallDetailViewModel = viewModel()
     val costVm: CostStatsViewModel = viewModel()
     val phoneStatsVm: PhoneStatsViewModel = viewModel()
     val blockNotificationUiState = rememberCallBlockNotificationUiState()
+    var homeTab by rememberSaveable { mutableStateOf(HomeTab.CALLS) }
+    var messagingCapabilityEpoch by remember { mutableIntStateOf(0) }
+
+    fun openConversation(
+        threadId: Long,
+        address: String,
+        displayName: String? = null,
+        photoUri: String? = null,
+        body: String = "",
+    ) {
+        conversationVm.openThread(threadId, address, displayName, photoUri, body)
+        nav.navigate(Routes.MESSAGE_THREAD) { launchSingleTop = true }
+    }
+
+    fun openAddress(address: String, body: String = "") {
+        conversationVm.openAddress(address, body)
+        nav.navigate(Routes.MESSAGE_THREAD) { launchSingleTop = true }
+    }
 
     // Quay lại app từ nền (ON_START của Activity) → TỰ nạp lại dữ liệu, không cần bấm "Làm mới".
     // Chỉ làm mới danh sách khi đã từng nạp (bỏ qua lần khởi động lạnh — màn hình tự nạp lần đầu);
@@ -121,6 +165,46 @@ fun AppNav() {
         detailVm.refresh()
         costVm.refresh()
         phoneStatsVm.refresh()
+        if (homeTab == HomeTab.MESSAGES) messagingVm.refreshCapability()
+        messagingCapabilityEpoch++
+    }
+
+    LaunchedEffect(messagingLaunch?.nonce, messagingCapabilityEpoch) {
+        val launch = messagingLaunch ?: return@LaunchedEffect
+        homeTab = HomeTab.MESSAGES
+        val consumed = when {
+            launch.unsupportedMultipleRecipients -> {
+                CallActions.toast(
+                context,
+                com.antimobile.callhs.i18n.appStrings().messaging.externalMultipleRecipients,
+                AppToastType.Warning,
+            )
+                true
+            }
+            launch.unsupportedMmsPayload -> {
+                CallActions.toast(
+                context,
+                com.antimobile.callhs.i18n.appStrings().messaging.externalMmsPayload,
+                AppToastType.Warning,
+            )
+                true
+            }
+            !SmsRole.isHeld(context) -> false
+            launch.threadId != null && !launch.recipient.isNullOrBlank() -> {
+                openConversation(launch.threadId, launch.recipient, body = launch.body)
+                true
+            }
+            !launch.recipient.isNullOrBlank() -> {
+                openAddress(launch.recipient, launch.body)
+                true
+            }
+            else -> {
+                newMessageVm.prepare(body = launch.body)
+                nav.navigate(Routes.MESSAGE_NEW) { launchSingleTop = true }
+                true
+            }
+        }
+        if (consumed) onMessagingLaunchConsumed(launch.nonce)
     }
 
     NavHost(navController = nav, startDestination = Routes.LIST) {
@@ -131,8 +215,23 @@ fun AppNav() {
             exitTransition = { slideOutHorizontally(tween(300)) { -it / 4 } + fadeOut(tween(300)) },
             popEnterTransition = { slideInHorizontally(tween(300)) { -it / 4 } + fadeIn(tween(300)) }
         ) {
-            CallListScreen(
-                vm = listVm,
+            HomeScreen(
+                callListVm = listVm,
+                messagingVm = messagingVm,
+                selectedTab = homeTab,
+                onSelectTab = { homeTab = it },
+                onOpenConversation = { conversation ->
+                    openConversation(
+                        threadId = conversation.threadId,
+                        address = conversation.address,
+                        displayName = conversation.displayName,
+                        photoUri = conversation.photoUri,
+                    )
+                },
+                onNewMessage = {
+                    newMessageVm.prepare()
+                    nav.navigate(Routes.MESSAGE_NEW)
+                },
                 onOpenNumber = { number ->
                     detailVm.load(number)
                     nav.navigate(Routes.DETAIL)
@@ -140,6 +239,32 @@ fun AppNav() {
                 onOpenContacts = { nav.navigate(Routes.CONTACTS) },
                 onOpenSettings = { nav.navigate(Routes.SETTINGS) },
                 onOpenCreateCategory = { nav.navigate(Routes.categoryEdit("new")) }
+            )
+        }
+
+        composable(
+            route = Routes.MESSAGE_THREAD,
+            enterTransition = { slideInHorizontally(tween(300)) { it } + fadeIn(tween(300)) },
+            popExitTransition = { slideOutHorizontally(tween(300)) { it } + fadeOut(tween(300)) },
+        ) {
+            ConversationScreen(vm = conversationVm, onBack = { nav.popBackStack() })
+        }
+
+        composable(
+            route = Routes.MESSAGE_NEW,
+            enterTransition = { slideInHorizontally(tween(300)) { it } + fadeIn(tween(300)) },
+            popExitTransition = { slideOutHorizontally(tween(300)) { it } + fadeOut(tween(300)) },
+        ) {
+            NewMessageScreen(
+                vm = newMessageVm,
+                onBack = { nav.popBackStack() },
+                onOpenRecipient = { address, body ->
+                    conversationVm.openAddress(address, body)
+                    nav.navigate(Routes.MESSAGE_THREAD) {
+                        popUpTo(Routes.MESSAGE_NEW) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                },
             )
         }
 

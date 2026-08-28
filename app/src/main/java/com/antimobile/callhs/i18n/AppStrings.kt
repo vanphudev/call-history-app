@@ -54,6 +54,74 @@ interface AppStrings {
     val donate: DonateStrings
     val backup: BackupStrings
     val blocker: CallBlockStrings
+    val messaging: MessagingStrings
+}
+
+/** Chuỗi cho tab Nhắn tin, hội thoại, composer, role/permission và notification SMS. */
+interface MessagingStrings {
+    val callsTab: String
+    val messagesTab: String
+    val searchHint: String
+    val unsupportedTitle: String
+    val unsupportedBody: String
+    val roleTitle: String
+    val roleBody: String
+    val setDefault: String
+    val permissionTitle: String
+    val permissionBody: String
+    val grantPermissions: String
+    val roleRequired: String
+    val loading: String
+    val loadFailed: String
+    val emptyTitle: String
+    val emptyBody: String
+    val noSearchResults: String
+    val newMessage: String
+    val youPrefix: String
+    val unread: String
+    val messageCount: String
+    val markRead: String
+    val markUnread: String
+    val deleteConversation: String
+    val deleteConversationTitle: String
+    val deleteConversationBody: String
+    val delete: String
+    val recipientTitle: String
+    val recipientHint: String
+    val recipientContinue: String
+    val invalidRecipient: String
+    val contactsPermissionHint: String
+    val messageHint: String
+    val send: String
+    val chooseSim: String
+    val simUnavailable: String
+    val noActiveSim: String
+    fun segmentCount(parts: Int, remaining: Int): String
+    val stateQueued: String
+    val stateSending: String
+    val stateSent: String
+    val stateDelivered: String
+    val stateFailed: String
+    val retry: String
+    val copy: String
+    val copied: String
+    val deleteMessageTitle: String
+    val deleteMessageBody: String
+    val sendFailed: String
+    val sendFailedNoService: String
+    val sendFailedRadioOff: String
+    val sendFailedLimit: String
+    val externalUnsupportedTitle: String
+    val externalMultipleRecipients: String
+    val externalMmsPayload: String
+    val mmsUnsupportedTitle: String
+    val mmsUnsupportedBody: String
+    val notificationChannelName: String
+    val notificationChannelDescription: String
+    val notificationReply: String
+    val notificationMarkRead: String
+    val notificationNewMessage: String
+    val directReplyFailed: String
 }
 
 /** Chuỗi DÙNG CHUNG nhiều màn: nhãn điều hướng, nút quyền, và toast của [com.antimobile.callhs.util.CallActions]. */

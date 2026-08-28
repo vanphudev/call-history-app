@@ -35,6 +35,9 @@ object LanguageSettings {
     /** Ngôn ngữ MÁY hiện quy về [Lang] app hỗ trợ — cho phụ đề mục "Theo hệ thống" ở picker. */
     val systemResolved: Lang get() = systemLang()
 
+    /** Đọc bảng chuỗi đã lưu mà không thay đổi Compose state; an toàn cho receiver/service chạy nền. */
+    fun stringsFor(context: Context): AppStrings = resolve(readPref(context.applicationContext)).strings
+
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 

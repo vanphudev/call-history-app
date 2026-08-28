@@ -44,6 +44,7 @@ object EnStrings : AppStrings {
     override val donate: DonateStrings = Donate
     override val backup: BackupStrings = Backup
     override val blocker: CallBlockStrings = Blocker
+    override val messaging: MessagingStrings = Messaging
 
     private object Common : CommonStrings {
         override val back = "Back"
@@ -897,7 +898,7 @@ object EnStrings : AppStrings {
         override val consentTitle = "Terms & Privacy"
         override val consentIntro =
             "One last step before you start. Please quickly read a few key points, then accept the terms to use CallHS."
-        override val consentPoint1 = "The app only READS data — it never edits, deletes or creates calls, messages or contacts on your device."
+        override val consentPoint1 = "Call history and Contacts always remain read-only. If you explicitly make CallHS your default SMS app, it can read, create, send, receive, update or delete SMS messages as you direct."
         override val consentPoint2 = "Your call log and contacts stay on your device — never uploaded to a server or shared with third parties."
         override val consentPoint3 = "The agency directory is downloaded from the internet for reference only — it is not an official government service."
         override val consentPoint4 = "Charges shown in the app are only estimates and may differ from your carrier's actual rates."
@@ -1725,6 +1726,74 @@ object EnStrings : AppStrings {
         override val errReadFailed = "Couldn't read the file. Please try again."
         override val errNothingSelected = "Please select at least one section."
         override val errEmptyBackup = "The backup file has no data to restore."
+    }
+
+    private object Messaging : MessagingStrings {
+        override val callsTab = "Calls"
+        override val messagesTab = "Messages"
+        override val searchHint = "Search conversations"
+        override val unsupportedTitle = "SMS isn't supported"
+        override val unsupportedBody = "CallHS couldn't find cellular messaging hardware on this device."
+        override val roleTitle = "Make CallHS your SMS app"
+        override val roleBody =
+            "To show, send and receive messages inside CallHS, Android needs you to choose CallHS as the default SMS app. You can change it again in Settings at any time."
+        override val setDefault = "Set as default"
+        override val permissionTitle = "Allow messaging"
+        override val permissionBody =
+            "CallHS needs SMS and SIM access to read conversations, receive messages and send with the SIM you choose."
+        override val grantPermissions = "Grant messaging access"
+        override val roleRequired = "CallHS is no longer the default SMS app."
+        override val loading = "Loading messages…"
+        override val loadFailed = "Messages couldn't be read. Check access and try again."
+        override val emptyTitle = "No conversations yet"
+        override val emptyBody = "Your SMS conversations will appear here."
+        override val noSearchResults = "No matching conversations found."
+        override val newMessage = "New message"
+        override val youPrefix = "You:"
+        override val unread = "Unread"
+        override val messageCount = "Messages"
+        override val markRead = "Mark as read"
+        override val markUnread = "Mark as unread"
+        override val deleteConversation = "Delete conversation"
+        override val deleteConversationTitle = "Delete conversation?"
+        override val deleteConversationBody = "Every SMS in this conversation will be deleted from the device. This can't be undone."
+        override val delete = "Delete"
+        override val recipientTitle = "Recipient"
+        override val recipientHint = "Enter a name or phone number"
+        override val recipientContinue = "Continue"
+        override val invalidRecipient = "Enter a valid phone number."
+        override val contactsPermissionHint = "Grant Contacts access to search by name. You can still enter a number directly."
+        override val messageHint = "SMS message"
+        override val send = "Send"
+        override val chooseSim = "Choose sending SIM"
+        override val simUnavailable = "The selected SIM is no longer active. Choose another SIM."
+        override val noActiveSim = "No active SIM was found."
+        override fun segmentCount(parts: Int, remaining: Int) = "$parts SMS · $remaining characters left in this part"
+        override val stateQueued = "Queued"
+        override val stateSending = "Sending"
+        override val stateSent = "Sent"
+        override val stateDelivered = "Delivered"
+        override val stateFailed = "Failed"
+        override val retry = "Retry"
+        override val copy = "Copy"
+        override val copied = "Message copied"
+        override val deleteMessageTitle = "Delete message?"
+        override val deleteMessageBody = "This message will be deleted from the device. This can't be undone."
+        override val sendFailed = "The SMS couldn't be sent. Check the SIM and cellular signal."
+        override val sendFailedNoService = "No cellular service."
+        override val sendFailedRadioOff = "Airplane mode or the cellular radio is off."
+        override val sendFailedLimit = "Android or your carrier is limiting SMS sending."
+        override val externalUnsupportedTitle = "Unsupported content"
+        override val externalMultipleRecipients = "Multiple recipients need separate SMS messages or Group MMS and will be added in a later phase."
+        override val externalMmsPayload = "A subject or attachment requires MMS and will be added in a later phase."
+        override val mmsUnsupportedTitle = "An MMS was received"
+        override val mmsUnsupportedBody = "This version can't download MMS content yet. SMS text messages continue to work normally."
+        override val notificationChannelName = "Messages"
+        override val notificationChannelDescription = "New SMS notifications received by CallHS"
+        override val notificationReply = "Reply"
+        override val notificationMarkRead = "Mark read"
+        override val notificationNewMessage = "New message"
+        override val directReplyFailed = "The reply couldn't be sent. Open CallHS to check the SIM."
     }
 
     /** Tên tháng tiếng Anh cho [CallList.monthYear]. */

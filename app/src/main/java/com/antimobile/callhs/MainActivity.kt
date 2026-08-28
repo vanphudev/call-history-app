@@ -1,6 +1,7 @@
 package com.antimobile.callhs
 
 import android.content.Context
+import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Build
@@ -14,6 +15,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
@@ -22,6 +26,9 @@ import com.antimobile.callhs.data.local.CategoryCatalog
 import com.antimobile.callhs.data.blocking.CallBlockNotifier
 import com.antimobile.callhs.data.blocking.CallBlockNotificationSettings
 import com.antimobile.callhs.data.blocking.CallBlockSettings
+import com.antimobile.callhs.data.messaging.MessagingIntentParser
+import com.antimobile.callhs.data.messaging.model.MessagingLaunch
+import com.antimobile.callhs.data.messaging.notification.MessageNotifier
 import com.antimobile.callhs.ui.navigation.AppNav
 import com.antimobile.callhs.ui.permissions.PermissionGate
 import com.antimobile.callhs.i18n.LanguageSettings
@@ -37,6 +44,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    private var messagingLaunch by mutableStateOf<MessagingLaunch?>(null)
 
     /**
      * CHẶN cỡ chữ HỆ THỐNG ("Cỡ chữ" / Font size): ghim fontScale = 1.0 cho toàn Activity, BẤT KỂ người
@@ -65,6 +73,8 @@ class MainActivity : ComponentActivity() {
         FontScaleSettings.init(applicationContext)
         // Xác định NGÔN NGỮ (đã lưu hoặc theo hệ thống) TRƯỚC setContent → khung hình đầu đã đúng ngôn ngữ.
         LanguageSettings.init(applicationContext)
+        MessageNotifier.ensureChannel(applicationContext)
+        messagingLaunch = MessagingIntentParser.parse(intent)
         // Xác định CHẾ ĐỘ Sáng/Tối (đã lưu, hoặc theo máy nếu SYSTEM) TRƯỚC setContent → khung hình đầu đúng chế độ.
         ThemeSettings.init(applicationContext)
         // Nạp cài đặt bộ chặn và tạo notification channel một lần; service vẫn đọc prefs trực tiếp
@@ -99,15 +109,28 @@ class MainActivity : ComponentActivity() {
                 // Nền ở gốc theo chế độ: đảm bảo vùng SAU thanh trạng thái/điều hướng luôn đúng màu trên mọi
                 // phiên bản 10→16 (thay cho window.navigationBarColor đã bị vô hiệu hoá ở API 35+).
                 Box(modifier = Modifier.fillMaxSize().background(AppBackground)) {
-                    // Cổng quyền BẮT BUỘC: xin lần lượt 3 quyền (nhật ký cuộc gọi → thông tin SIM → danh bạ)
-                    // theo thứ tự rõ ràng trước khi vào ứng dụng.
-                    PermissionGate { AppNav() }
+                    // Cổng đồng ý điều khoản duy nhất. Quyền nhạy cảm được xin tại đúng tính năng:
+                    // Call Log ở tab Cuộc gọi, ROLE_SMS + quyền SMS ở tab Nhắn tin, Danh bạ khi cần.
+                    PermissionGate {
+                        AppNav(
+                            messagingLaunch = messagingLaunch,
+                            onMessagingLaunchConsumed = { nonce ->
+                                if (messagingLaunch?.nonce == nonce) messagingLaunch = null
+                            },
+                        )
+                    }
                     // Host toast DUY NHẤT điều phối queue toàn app; host trong dialog/sheet chỉ nhận phần hiển thị
                     // để toast luôn nổi trên đúng cửa sổ đang ở trên cùng.
                     AppToastHost(modifier = Modifier.fillMaxSize(), isRootHost = true)
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        messagingLaunch = MessagingIntentParser.parse(intent)
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {

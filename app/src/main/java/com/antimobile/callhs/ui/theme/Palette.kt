@@ -72,6 +72,11 @@ class Palette(
     val chipSelectedText: Color,
     val chipBg: Color,
     val chipText: Color,
+    // Bong bóng SMS
+    val messageOutgoingBubble: Color,
+    val messageIncomingBubble: Color,
+    val messageOutgoingText: Color,
+    val messageIncomingText: Color,
     // Ánh xạ Material
     val onPrimaryContainer: Color,
     // Token thành phần dùng chung (avatar chưa lưu, tay cầm bottom sheet)
@@ -121,6 +126,10 @@ val LightPalette = Palette(
     chipSelectedText = Color(0xFF1E8E3E),
     chipBg = Color(0xFFF4F6FA),
     chipText = Color(0xFF5F6368),
+    messageOutgoingBubble = Color(0xFF34A853),
+    messageIncomingBubble = Color(0xFFF1F3F4),
+    messageOutgoingText = Color(0xFFFFFFFF),
+    messageIncomingText = Color(0xFF1F1F1F),
     onPrimaryContainer = Color(0xFF0B3D1E),
     avatarGray = Color(0xFFCFD8DC),
     sheetHandle = Color(0xFFDADCE0)
@@ -170,6 +179,10 @@ val DarkPalette = Palette(
     chipSelectedText = Color(0xFF5FD07E),
     chipBg = Color(0xFF282C2F),
     chipText = Color(0xFFA3A9AF),
+    messageOutgoingBubble = Color(0xFF277C42),
+    messageIncomingBubble = Color(0xFF282C2F),
+    messageOutgoingText = Color(0xFFFFFFFF),
+    messageIncomingText = Color(0xFFE8EAEB),
     onPrimaryContainer = Color(0xFF9FE7B6), // chữ xanh lá SÁNG trên nền primaryContainer tối
     avatarGray = Color(0xFF3B444B),      // avatar số chưa lưu: xám xanh tối, icon/chữ trắng nổi rõ
     sheetHandle = Color(0xFF3C4247)      // tay cầm bottom sheet, thấy rõ trên nền sheet tối

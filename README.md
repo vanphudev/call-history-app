@@ -1,12 +1,16 @@
 # CallHS — trợ lý cuộc gọi cục bộ
 
-CallHS là ứng dụng Android viết bằng Kotlin/Jetpack Compose để xem, phân tích và tổ chức lịch sử
-cuộc gọi. Ứng dụng theo hướng **local-first**: nhật ký cuộc gọi và danh bạ được đọc trực tiếp từ
-provider của Android; dữ liệu do người dùng tạo được lưu cục bộ trên thiết bị.
+CallHS là ứng dụng Android viết bằng Kotlin/Jetpack Compose để quản lý cuộc gọi và SMS. Ứng dụng
+theo hướng **local-first**: nhật ký cuộc gọi, danh bạ và SMS được đọc trực tiếp từ provider của
+Android; dữ liệu riêng do người dùng tạo được lưu cục bộ trên thiết bị.
 
 > CallHS không thay thế ứng dụng Điện thoại mặc định. Riêng tính năng chặn cuộc gọi sử dụng
 > `ROLE_CALL_SCREENING` và `CallScreeningService` chính thức của Android sau khi người dùng chủ
 > động cấp vai trò này.
+
+> CallHS chỉ trở thành ứng dụng SMS mặc định khi người dùng vào tab Nhắn tin, đọc giải thích và tự
+> xác nhận `ROLE_SMS`. Giai đoạn hiện tại hỗ trợ SMS văn bản một người nhận; MMS/ảnh, nhóm, vị trí và
+> danh thiếp nằm trong lộ trình tiếp theo.
 
 ## Tính năng chính
 
@@ -17,6 +21,8 @@ provider của Android; dữ liệu do người dùng tạo được lưu cục 
 - Danh bạ chỉ đọc, hiển thị tên/ảnh, tìm kiếm không dấu và các hành động mở ứng dụng hệ thống.
 - Nhóm phân loại số điện thoại do người dùng tự tạo, có icon, màu, thành viên và menu nhấn giữ.
 - Mẫu tin nhắn, QR, chia sẻ liên hệ, tra cứu Zalo/web, danh bạ cơ quan và các tiện ích liên quan.
+- Tab Nhắn tin tích hợp: hội thoại SMS, gửi/nhận thật, SMS dài, đa SIM, trạng thái gửi/giao, thông báo,
+  trả lời nhanh, liên kết `sms:/smsto:` và bản nháp cục bộ.
 - Theme sáng/tối/hệ thống, cỡ chữ tuỳ chỉnh và giao diện song ngữ Việt/Anh.
 - Sao lưu/khôi phục có chọn từng nhóm dữ liệu và ba chế độ `REPLACE`, `ADD`, `UPDATE`.
 - Chặn cuộc gọi và spam theo quy tắc, có lịch sử riêng, thông báo và nhiều phương thức xử lý.
@@ -83,12 +89,15 @@ thông báo “đã chặn”. Chi tiết kiến trúc, storage key, giới hạ
 |---|---|---|
 | Nhật ký cuộc gọi | `CallLog` hệ thống | Chỉ đọc; CallHS không sửa, xoá hoặc khôi phục vào provider hệ thống |
 | Danh bạ | `ContactsContract` | Chỉ đọc; dùng để hiển thị, chọn rule và xác định số lạ |
+| SMS | `Telephony` Provider | Chỉ truy cập khi giữ `ROLE_SMS`; đọc/ghi theo thao tác gửi, nhận, đánh dấu hoặc xoá của người dùng |
+| Bản nháp và ledger SMS | Room `callhs-messaging-private.db` | Lưu cục bộ, bị loại khỏi cloud backup và device transfer mặc định |
 | Danh sách số, rule và lịch sử chặn | Room `callhs.db` | Dữ liệu app sở hữu, có thể sao lưu/khôi phục |
 | Cấu hình theme, ngôn ngữ, bộ chặn | `SharedPreferences` | Lưu cục bộ; phần được hỗ trợ có thể đưa vào backup |
 
 Quyền chính gồm `READ_CALL_LOG`, `READ_CONTACTS`, `READ_PHONE_STATE`, `READ_PHONE_NUMBERS`,
-`CAMERA` và `POST_NOTIFICATIONS`. Vai trò sàng lọc cuộc gọi được xin riêng qua `RoleManager`,
-không phải quyền ngầm và không biến CallHS thành default dialer.
+`CAMERA` và `POST_NOTIFICATIONS`. Nhóm quyền SMS chỉ được xin theo tính năng sau khi người dùng
+chọn `ROLE_SMS`. Vai trò sàng lọc cuộc gọi được xin riêng qua `RoleManager`, không phải quyền ngầm
+và không biến CallHS thành default dialer.
 
 ## Tech stack
 
@@ -108,6 +117,7 @@ app/src/main/java/com/antimobile/callhs/
 │  ├─ contacts/          Danh bạ chỉ đọc, tìm kiếm và lập chỉ mục
 │  ├─ local/             Room: nhóm phân loại, danh sách số, rule và lịch sử chặn
 │  ├─ blocking/          Matcher, repository, settings, notifier, screening service
+│  ├─ messaging/         ROLE_SMS, Provider, sidecar DB, gửi/nhận, callback và notification
 │  ├─ backup/            Backup JSON, parser và restore theo section
 │  ├─ agency/            Danh bạ cơ quan
 │  ├─ legal/             Nội dung pháp lý
@@ -115,6 +125,8 @@ app/src/main/java/com/antimobile/callhs/
 ├─ i18n/                 Hợp đồng chuỗi + bản dịch Việt/Anh
 ├─ ui/
 │  ├─ calllist/          Danh sách cuộc gọi và context menu chuẩn
+│  ├─ home/              Khung tab Cuộc gọi/Nhắn tin dùng chung
+│  ├─ messaging/         Danh sách hội thoại, hội thoại và màn soạn người nhận
 │  ├─ calldetail/        Chi tiết cuộc gọi và công cụ
 │  ├─ callhistory/       Toàn bộ cuộc gọi của một số
 │  ├─ contacts/          Danh bạ
@@ -155,3 +167,4 @@ thay đổi entity được cập nhật trực tiếp vào baseline v1 và dữ
 ## Tài liệu chuyên sâu
 
 - [Kiến trúc tính năng chặn cuộc gọi](docs/CALL_BLOCKING.md)
+- [Kế hoạch tích hợp ứng dụng SMS mặc định](docs/DEFAULT_SMS_PLAN.md)

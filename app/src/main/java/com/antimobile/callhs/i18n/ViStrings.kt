@@ -44,6 +44,7 @@ object ViStrings : AppStrings {
     override val donate: DonateStrings = Donate
     override val backup: BackupStrings = Backup
     override val blocker: CallBlockStrings = Blocker
+    override val messaging: MessagingStrings = Messaging
 
     private object Common : CommonStrings {
         override val back = "Quay lại"
@@ -886,7 +887,7 @@ object ViStrings : AppStrings {
         override val consentIntro =
             "Bước cuối cùng trước khi bắt đầu. Vui lòng đọc nhanh vài điểm quan trọng rồi đồng ý với " +
                 "điều khoản để sử dụng CallHS."
-        override val consentPoint1 = "Ứng dụng CHỈ ĐỌC dữ liệu — không sửa, xoá hay tạo cuộc gọi, tin nhắn, danh bạ trên máy bạn."
+        override val consentPoint1 = "Nhật ký cuộc gọi và Danh bạ luôn chỉ đọc. Khi bạn chủ động đặt CallHS làm ứng dụng SMS mặc định, CallHS sẽ đọc, tạo, gửi, nhận, cập nhật hoặc xoá SMS theo thao tác của bạn."
         override val consentPoint2 = "Nhật ký cuộc gọi và danh bạ chỉ nằm trên máy bạn, không tải lên máy chủ hay chia sẻ cho bên thứ ba."
         override val consentPoint3 = "Danh bạ cơ quan được tải từ Internet để tra cứu, chỉ mang tính tham khảo — không phải dịch vụ chính thức của cơ quan nhà nước."
         override val consentPoint4 = "Cước phí hiển thị trong ứng dụng chỉ là ước tính, có thể khác với bảng giá thực tế của nhà mạng."
@@ -1703,5 +1704,73 @@ object ViStrings : AppStrings {
         override val errReadFailed = "Không đọc được file. Vui lòng thử lại."
         override val errNothingSelected = "Hãy chọn ít nhất một phần dữ liệu."
         override val errEmptyBackup = "File sao lưu không có dữ liệu nào để khôi phục."
+    }
+
+    private object Messaging : MessagingStrings {
+        override val callsTab = "Cuộc gọi"
+        override val messagesTab = "Nhắn tin"
+        override val searchHint = "Tìm hội thoại"
+        override val unsupportedTitle = "Thiết bị không hỗ trợ SMS"
+        override val unsupportedBody = "CallHS không tìm thấy phần cứng nhắn tin di động trên thiết bị này."
+        override val roleTitle = "Đặt CallHS làm ứng dụng SMS"
+        override val roleBody =
+            "Để hiển thị, gửi và nhận tin nhắn ngay trong CallHS, Android cần bạn chọn CallHS làm ứng dụng SMS mặc định. Bạn có thể đổi lại bất cứ lúc nào trong Cài đặt."
+        override val setDefault = "Đặt làm mặc định"
+        override val permissionTitle = "Cho phép nhắn tin"
+        override val permissionBody =
+            "CallHS cần quyền SMS và thông tin SIM để đọc hội thoại, nhận tin đến và gửi đúng SIM bạn chọn."
+        override val grantPermissions = "Cấp quyền nhắn tin"
+        override val roleRequired = "CallHS không còn là ứng dụng SMS mặc định."
+        override val loading = "Đang tải tin nhắn…"
+        override val loadFailed = "Không thể đọc tin nhắn. Hãy kiểm tra quyền và thử lại."
+        override val emptyTitle = "Chưa có hội thoại"
+        override val emptyBody = "Tin nhắn SMS của bạn sẽ xuất hiện ở đây."
+        override val noSearchResults = "Không tìm thấy hội thoại phù hợp."
+        override val newMessage = "Tin nhắn mới"
+        override val youPrefix = "Bạn:"
+        override val unread = "Chưa đọc"
+        override val messageCount = "Số tin nhắn"
+        override val markRead = "Đánh dấu đã đọc"
+        override val markUnread = "Đánh dấu chưa đọc"
+        override val deleteConversation = "Xoá hội thoại"
+        override val deleteConversationTitle = "Xoá hội thoại?"
+        override val deleteConversationBody = "Toàn bộ SMS trong hội thoại này sẽ bị xoá khỏi thiết bị. Không thể hoàn tác."
+        override val delete = "Xoá"
+        override val recipientTitle = "Người nhận"
+        override val recipientHint = "Nhập tên hoặc số điện thoại"
+        override val recipientContinue = "Tiếp tục"
+        override val invalidRecipient = "Hãy nhập một số điện thoại hợp lệ."
+        override val contactsPermissionHint = "Cấp quyền Danh bạ để tìm theo tên; bạn vẫn có thể nhập số trực tiếp."
+        override val messageHint = "Tin nhắn SMS"
+        override val send = "Gửi"
+        override val chooseSim = "Chọn SIM gửi"
+        override val simUnavailable = "SIM đã chọn không còn hoạt động. Hãy chọn lại."
+        override val noActiveSim = "Không tìm thấy SIM đang hoạt động."
+        override fun segmentCount(parts: Int, remaining: Int) = "$parts SMS · còn $remaining ký tự trong phần này"
+        override val stateQueued = "Đang chờ"
+        override val stateSending = "Đang gửi"
+        override val stateSent = "Đã gửi"
+        override val stateDelivered = "Đã nhận"
+        override val stateFailed = "Gửi thất bại"
+        override val retry = "Thử lại"
+        override val copy = "Sao chép"
+        override val copied = "Đã sao chép tin nhắn"
+        override val deleteMessageTitle = "Xoá tin nhắn?"
+        override val deleteMessageBody = "Tin nhắn này sẽ bị xoá khỏi thiết bị. Không thể hoàn tác."
+        override val sendFailed = "Không gửi được SMS. Hãy kiểm tra SIM và sóng di động."
+        override val sendFailedNoService = "Không có dịch vụ di động."
+        override val sendFailedRadioOff = "Chế độ máy bay hoặc radio di động đang tắt."
+        override val sendFailedLimit = "Android hoặc nhà mạng đang giới hạn việc gửi SMS."
+        override val externalUnsupportedTitle = "Nội dung chưa được hỗ trợ"
+        override val externalMultipleRecipients = "Gửi cho nhiều người cần SMS riêng lẻ hoặc Group MMS và sẽ được bổ sung ở giai đoạn sau."
+        override val externalMmsPayload = "Tiêu đề hoặc tệp đính kèm cần MMS và sẽ được bổ sung ở giai đoạn sau."
+        override val mmsUnsupportedTitle = "Đã nhận một MMS"
+        override val mmsUnsupportedBody = "Phiên bản hiện tại chưa thể tải nội dung MMS. Tin nhắn SMS văn bản vẫn hoạt động bình thường."
+        override val notificationChannelName = "Tin nhắn"
+        override val notificationChannelDescription = "Thông báo SMS mới nhận trong CallHS"
+        override val notificationReply = "Trả lời"
+        override val notificationMarkRead = "Đánh dấu đã đọc"
+        override val notificationNewMessage = "Tin nhắn mới"
+        override val directReplyFailed = "Không thể gửi câu trả lời. Mở CallHS để kiểm tra SIM."
     }
 }
