@@ -79,11 +79,18 @@
         <service
             android:name=".data.outgoing.OutgoingCallRedirectionService"
             android:exported="true"
+            android:process=":call_redirection"
             android:permission="android.permission.BIND_CALL_REDIRECTION_SERVICE">
             <intent-filter>
                 <action android:name="android.telecom.CallRedirectionService" />
             </intent-filter>
         </service>
+
+        <!-- Post-response analysis runs in the normal app process so preferences are never shared
+             across processes. The receiver only enqueues background work and returns immediately. -->
+        <receiver
+            android:name=".data.outgoing.OutgoingCallPostResponseReceiver"
+            android:exported="false" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
