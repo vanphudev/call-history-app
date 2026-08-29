@@ -1,16 +1,16 @@
-# CallHS — trợ lý cuộc gọi cục bộ
+# Quản lý cuộc gọi và tin nhắn (MCAS)
 
-CallHS là ứng dụng Android viết bằng Kotlin/Jetpack Compose để quản lý cuộc gọi và SMS. Ứng dụng
+MCAS là ứng dụng Android viết bằng Kotlin/Jetpack Compose để quản lý cuộc gọi và SMS. Ứng dụng
 theo hướng **local-first**: nhật ký cuộc gọi, danh bạ và SMS được đọc trực tiếp từ provider của
 Android; dữ liệu riêng do người dùng tạo được lưu cục bộ trên thiết bị.
 
-> CallHS không thay thế ứng dụng Điện thoại mặc định. Riêng tính năng chặn cuộc gọi sử dụng
+> MCAS không thay thế ứng dụng Điện thoại mặc định. Riêng tính năng chặn cuộc gọi sử dụng
 > `ROLE_CALL_SCREENING` và `CallScreeningService` chính thức của Android sau khi người dùng chủ
 > động cấp vai trò này.
 
-> CallHS chỉ trở thành ứng dụng SMS mặc định khi người dùng vào tab Nhắn tin, đọc giải thích và tự
-> xác nhận `ROLE_SMS`. Giai đoạn hiện tại hỗ trợ SMS văn bản một người nhận; MMS/ảnh, nhóm, vị trí và
-> danh thiếp nằm trong lộ trình tiếp theo.
+> MCAS chỉ trở thành ứng dụng SMS mặc định khi người dùng vào tab Nhắn tin, đọc giải thích và tự
+> xác nhận `ROLE_SMS`. Giai đoạn hiện tại hỗ trợ SMS văn bản và MMS ảnh + caption + subject tới một
+> người nhận. Group MMS, vị trí và danh thiếp nằm trong lộ trình tiếp theo.
 
 ## Tính năng chính
 
@@ -21,18 +21,18 @@ Android; dữ liệu riêng do người dùng tạo được lưu cục bộ tr�
 - Danh bạ chỉ đọc, hiển thị tên/ảnh, tìm kiếm không dấu và các hành động mở ứng dụng hệ thống.
 - Nhóm phân loại số điện thoại do người dùng tự tạo, có icon, màu, thành viên và menu nhấn giữ.
 - Mẫu tin nhắn, QR, chia sẻ liên hệ, tra cứu Zalo/web, danh bạ cơ quan và các tiện ích liên quan.
-- Tab Nhắn tin tích hợp: hội thoại SMS, gửi/nhận thật, SMS dài, đa SIM, trạng thái gửi/giao, thông báo,
-  trả lời nhanh, liên kết `sms:/smsto:` và bản nháp cục bộ.
+- Tab Nhắn tin tích hợp: hội thoại SMS/MMS, gửi/nhận thật, ảnh MMS có tối ưu theo nhà mạng, tải tự động/thủ
+  công, SMS dài, đa SIM, trạng thái gửi/giao, thông báo, trả lời nhanh và bản nháp cục bộ.
 - Theme sáng/tối/hệ thống, cỡ chữ tuỳ chỉnh và giao diện song ngữ Việt/Anh.
 - Sao lưu/khôi phục có chọn từng nhóm dữ liệu và ba chế độ `REPLACE`, `ADD`, `UPDATE`.
 - Chặn cuộc gọi và spam theo quy tắc, có lịch sử riêng, thông báo và nhiều phương thức xử lý.
 
 ## Chặn cuộc gọi và spam
 
-Từ Cài đặt, người dùng mở màn Chặn cuộc gọi và chọn CallHS làm ứng dụng sàng lọc cuộc gọi nếu
+Từ Cài đặt, người dùng mở màn Chặn cuộc gọi và chọn MCAS làm ứng dụng sàng lọc cuộc gọi nếu
 vai trò chưa được cấp. Sau đó có thể:
 
-- Màn chính có thẻ **Tìm hiểu cách CallHS chặn cuộc gọi** để giải thích thứ tự kiểm tra, bốn khu vực
+- Màn chính có thẻ **Tìm hiểu cách MCAS chặn cuộc gọi** để giải thích thứ tự kiểm tra, bốn khu vực
   quản lý rõ ràng: **Danh sách cho phép**, **Danh sách chặn**, **Xử lý theo danh bạ**,
   **Quy tắc nâng cao**, và mục **Các vấn đề thường gặp** để tự kiểm tra lỗi chặn/thông báo.
 - Nhập tay hoặc chọn số từ Danh bạ/Call Log. Hai picker chỉ là nguồn; mỗi số được lưu thành một mục
@@ -43,7 +43,7 @@ vai trò chưa được cấp. Sau đó có thể:
   đầu số, đuôi số, chuỗi chứa, độ dài, nhà mạng, vùng quốc gia hoặc điều kiện đặc biệt.
 - Bộ lọc cuộc gọi có dấu hiệu spam là một rule `BLOCK` opt-in. Bộ lọc dùng các tín hiệu cục bộ: số Việt Nam
   hoàn chỉnh thuộc nhóm `022`, `023`, `024`, `028`, `059`, `099`; đầu số di động Việt Nam mà danh mục
-  CallHS chưa nhận diện; hoặc Android 11+ báo xác minh số gọi thất bại. Đây không phải danh sách số lừa đảo
+  MCAS chưa nhận diện; hoặc Android 11+ báo xác minh số gọi thất bại. Đây không phải danh sách số lừa đảo
   đã được xác nhận và có thể chặn nhầm số hợp lệ; Danh sách cho phép luôn được ưu tiên. Lịch sử ghi chính xác
   dấu hiệu đã khớp bằng reason codec versioned; nguồn và giới hạn được ghi tại tài liệu kiến trúc.
 - Sắp thứ tự rule nâng cao; rule đầu tiên khớp được áp dụng.
@@ -87,17 +87,17 @@ thông báo “đã chặn”. Chi tiết kiến trúc, storage key, giới hạ
 
 | Dữ liệu | Nguồn | Cách sử dụng |
 |---|---|---|
-| Nhật ký cuộc gọi | `CallLog` hệ thống | Chỉ đọc; CallHS không sửa, xoá hoặc khôi phục vào provider hệ thống |
+| Nhật ký cuộc gọi | `CallLog` hệ thống | Chỉ đọc; MCAS không sửa, xoá hoặc khôi phục vào provider hệ thống |
 | Danh bạ | `ContactsContract` | Chỉ đọc; dùng để hiển thị, chọn rule và xác định số lạ |
 | SMS | `Telephony` Provider | Chỉ truy cập khi giữ `ROLE_SMS`; đọc/ghi theo thao tác gửi, nhận, đánh dấu hoặc xoá của người dùng |
-| Bản nháp và ledger SMS | Room `callhs-messaging-private.db` | Lưu cục bộ, bị loại khỏi cloud backup và device transfer mặc định |
-| Danh sách số, rule và lịch sử chặn | Room `callhs.db` | Dữ liệu app sở hữu, có thể sao lưu/khôi phục |
+| Bản nháp và ledger SMS | Room `mcas-messaging-private.db` | Lưu cục bộ, bị loại khỏi cloud backup và device transfer mặc định |
+| Danh sách số, rule và lịch sử chặn | Room `mcas.db` | Dữ liệu app sở hữu, có thể sao lưu/khôi phục |
 | Cấu hình theme, ngôn ngữ, bộ chặn | `SharedPreferences` | Lưu cục bộ; phần được hỗ trợ có thể đưa vào backup |
 
 Quyền chính gồm `READ_CALL_LOG`, `READ_CONTACTS`, `READ_PHONE_STATE`, `READ_PHONE_NUMBERS`,
 `CAMERA` và `POST_NOTIFICATIONS`. Nhóm quyền SMS chỉ được xin theo tính năng sau khi người dùng
 chọn `ROLE_SMS`. Vai trò sàng lọc cuộc gọi được xin riêng qua `RoleManager`, không phải quyền ngầm
-và không biến CallHS thành default dialer.
+và không biến MCAS thành default dialer.
 
 ## Tech stack
 
@@ -110,7 +110,7 @@ và không biến CallHS thành default dialer.
 ## Cấu trúc chính
 
 ```text
-app/src/main/java/com/antimobile/callhs/
+app/src/main/java/com/antimobile/mcas/
 ├─ MainActivity.kt
 ├─ data/
 │  ├─ repository/        Nhật ký cuộc gọi hệ thống

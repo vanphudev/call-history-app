@@ -1,4 +1,4 @@
-"""Generate the four short, original CallHS notification WAV assets."""
+"""Generate the four short, original MCAS notification WAV assets."""
 
 from __future__ import annotations
 
@@ -66,7 +66,7 @@ def write(name: str, duration: float, sampler) -> None:
 
 
 if __name__ == "__main__":
-    write("callhs_pulse.wav", 0.90, pulse)
-    write("callhs_ripple.wav", 1.05, ripple)
-    write("callhs_bamboo.wav", 1.22, bamboo)
-    write("callhs_crystal.wav", 1.38, crystal)
+    write("mcas_pulse.wav", 0.90, pulse)
+    write("mcas_ripple.wav", 1.05, ripple)
+    write("mcas_bamboo.wav", 1.22, bamboo)
+    write("mcas_crystal.wav", 1.38, crystal)

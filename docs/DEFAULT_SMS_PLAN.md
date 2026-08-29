@@ -1,10 +1,10 @@
-# Kế hoạch tích hợp SMS mặc định vào CallHS
+# Kế hoạch tích hợp SMS mặc định vào MCAS
 
-> Trạng thái: **Phase 1 SMS text đã được triển khai trong mã nguồn**; đang ở mức alpha nội bộ để kiểm thử thiết bị/OEM
+> Trạng thái: **Phase 1 SMS text + Phase 2 MMS ảnh đã được triển khai trong mã nguồn**; cần matrix thiết bị/SIM thật trước phát hành rộng
 >
-> Ngày rà soát: 2026-08-28
+> Ngày rà soát: 2026-08-29
 >
-> Phạm vi đầu tiên: SMS văn bản một người nhận, đa SIM, gửi/nhận thật, trạng thái gửi, thông báo và UI hội thoại hoàn chỉnh
+> Phạm vi hiện tại: SMS text và MMS một người nhận (ảnh + caption + subject), đa SIM, Provider, callback và UI hội thoại
 
 ## 0. Mốc triển khai Phase 1
 
@@ -12,30 +12,46 @@
 
 - Home có tab **Cuộc gọi / Nhắn tin**, vuốt ngang hoặc chạm tab với animation; QR, Danh bạ, Tìm kiếm và
   Cài đặt vẫn là action dùng chung.
-- Đủ bộ component/permission để yêu cầu `ROLE_SMS`; role và quyền SMS chỉ được hỏi khi người dùng chủ động
-  vào tính năng, không khóa toàn ứng dụng.
+- Đủ bộ component/permission để yêu cầu `ROLE_SMS`; role và các quyền SMS lõi được đưa vào onboarding toàn
+  màn hình cùng các quyền quan trọng. Quyền MMS/WAP vẫn được khai báo nhưng không được phép khóa SMS text.
 - Đọc/ghi Telephony SMS Provider, danh sách hội thoại, unread, tìm kiếm, màn hội thoại, nháp, xóa/đọc/chưa
   đọc, composer IME-aware, SMS dài và chọn SIM bằng `subscriptionId`.
 - Gửi thật qua `SmsManager`, ledger từng segment, callback sent/delivery, lỗi không tự retry; nhận
   `SMS_DELIVER`, chống xử lý trùng, ghi Inbox và notification riêng tư có trả lời nhanh/đánh dấu đã đọc.
-- Hỗ trợ `sms:`, `smsto:`, notification deep link và `RESPOND_VIA_MESSAGE`; payload nhiều người nhận/MMS
-  bị chặn rõ ràng thay vì âm thầm gửi sai loại.
+- Hỗ trợ `sms:`, `smsto:`, notification deep link và `RESPOND_VIA_MESSAGE`; ở Phase 1, payload nhiều người
+  nhận/MMS từng bị chặn rõ ràng thay vì âm thầm gửi sai loại.
 - Sidecar Room chứa nội dung nhạy cảm đã bị loại khỏi Auto Backup/device transfer mặc định; nội dung đồng ý
   quyền riêng tư và README đã được cập nhật đúng khả năng ghi SMS.
 
-Giới hạn phát hành vẫn còn: `MmsDeliverReceiver` hiện chỉ cảnh báo an toàn, chưa tải/ghi nội dung MMS.
-Vì vậy Phase 1 phù hợp alpha nội bộ và kiểm thử SMS text, chưa được mô tả là bản thay thế SMS/MMS hoàn chỉnh.
-Các hạng mục ảnh/MMS, nhóm, vị trí, danh thiếp và tính năng quản lý nâng cao vẫn được giữ nguyên trong
-Phase 2–4 ở cuối tài liệu này.
+## 0.1. Mốc triển khai Phase 2 — MMS ảnh
+
+Đã hoàn thành trong mã nguồn ngày 2026-08-29:
+
+- Codec MMS 1.2 riêng, giới hạn PDU/part/MIME và unit test; không gọi API ẩn `com.google.android.mms`, không
+  reflection và không log PDU/nội dung thô.
+- `WAP_PUSH_DELIVER` parse `notification.ind`, chống trùng theo transaction ID, lưu placeholder vào MMS
+  Provider, tải bằng `SmsManager` của đúng `subscriptionId`, parse `retrieve.conf` và ghi text/image part.
+- Tải tự động khi không roaming, tùy chọn tắt tự tải/tự tải roaming trong Cài đặt, tải thủ công và retry ngay
+  trong bubble; callback giữ result/HTTP status ở Room và dọn PDU tạm/quyền URI sau trạng thái cuối.
+- Photo Picker không cần quyền bộ nhớ; ảnh được đọc có chặn kích thước giải nén, áp orientation qua
+  `ImageDecoder`, bỏ metadata khi re-encode JPEG và nén theo max size/width/height từ carrier config.
+- Gửi ảnh + caption + subject bằng MMS qua đúng SIM, luôn hiện xác nhận kênh dữ liệu/khả năng tính phí;
+  Outbox/Sent/Failed và part được lưu trong Telephony MMS Provider.
+- Hội thoại hợp nhất SMS/MMS theo `threadId`; thumbnail, xem ảnh toàn màn hình, trạng thái tải/lỗi, xóa/đọc
+  và observer Provider hoạt động cho cả hai transport. FileProvider chỉ mở ba thư mục cache con riêng.
+
+Release gate còn lại: phải chạy matrix thiết bị thật với ít nhất các SIM/nhà mạng mục tiêu, gồm gửi/nhận qua
+Wi-Fi bật, dữ liệu di động tắt, roaming, APN lỗi, callback sau process death và PDU do các OEM khác nhau tạo.
+Group MMS, vị trí, danh thiếp và quản lý nâng cao vẫn thuộc Phase 3–4, không được xem là đã hỗ trợ.
 
 ## 1. Kết luận và các quyết định đã chốt
 
-CallHS có thể trở thành ứng dụng SMS mặc định thực thụ vì dự án đang dùng `minSdk 29`, `targetSdk 36`
-và Jetpack Compose. Tuy nhiên đây không chỉ là thêm một màn hình nhắn tin. Khi giữ `ROLE_SMS`, CallHS phải
+MCAS có thể trở thành ứng dụng SMS mặc định thực thụ vì dự án đang dùng `minSdk 29`, `targetSdk 36`
+và Jetpack Compose. Tuy nhiên đây không chỉ là thêm một màn hình nhắn tin. Khi giữ `ROLE_SMS`, MCAS phải
 tự nhận tin đến, tự ghi tin đến/tin đi vào Telephony Provider, xử lý callback gửi, notification và các intent
 hệ thống. Nếu một mắt xích không hoạt động, người dùng có thể không nhìn thấy tin nhắn hoặc gửi trùng SMS.
 
-Các quyết định kiến trúc cho CallHS:
+Các quyết định kiến trúc cho MCAS:
 
 1. Màn chính có thanh tab **Cuộc gọi / Nhắn tin** thay vị trí chữ **Lịch sử cuộc gọi**. Cụm nút QR,
    Danh bạ, Tìm kiếm và Cài đặt vẫn đứng yên; hành vi tìm kiếm thay đổi theo tab đang chọn.
@@ -44,7 +60,7 @@ Các quyết định kiến trúc cho CallHS:
 3. Giai đoạn đầu chỉ cho soạn/gửi **SMS text tới một người nhận**. Không âm thầm đổi sang MMS và không cho
    chọn ảnh, vị trí, danh thiếp hoặc nhóm người nhận trong UI giai đoạn này.
 4. Dùng **Telephony SMS/MMS Provider làm nguồn dữ liệu chính**. Không sao chép toàn bộ hộp thư vào Room.
-   Room chỉ giữ dữ liệu riêng của CallHS: bản nháp, SIM ưu tiên của hội thoại, dữ liệu tổng hợp callback gửi
+   Room chỉ giữ dữ liệu riêng của MCAS: bản nháp, SIM ưu tiên của hội thoại, dữ liệu tổng hợp callback gửi
    và fingerprint chống xử lý trùng.
 5. Chọn SIM bằng `subscriptionId`, không dùng nhãn `SIM 1`/`SIM 2` hoặc `slotIndex` làm khóa. `SimScope`
    hiện tại chỉ phục vụ phạm vi xem nhật ký cuộc gọi và tuyệt đối không được tái sử dụng để quyết định SIM gửi.
@@ -57,7 +73,7 @@ Các quyết định kiến trúc cho CallHS:
 
 ### Thế nào là “SMS mặc định thực thụ” trong phạm vi này
 
-Chỉ coi là hoàn thành khi CallHS:
+Chỉ coi là hoàn thành khi MCAS:
 
 - Đủ điều kiện để hệ thống hiển thị trong hộp chọn ứng dụng SMS mặc định và người dùng tự xác nhận.
 - Đọc được lịch sử SMS hiện có sau khi giữ role.
@@ -65,7 +81,7 @@ Chỉ coi là hoàn thành khi CallHS:
 - Nhận SMS khi app đang mở, ở nền và khi tiến trình đã bị hệ thống dừng; tự ghi tin đến vào Provider.
 - Hiển thị hội thoại, unread, trạng thái gửi/thất bại và notification đúng conversation.
 - Nhận `sms:`, `smsto:`, `mms:`, `mmsto:` từ ứng dụng khác và xử lý `RESPOND_VIA_MESSAGE`.
-- Ngừng đọc/gửi/nhận qua các API nhạy cảm ngay khi CallHS không còn giữ `ROLE_SMS`.
+- Ngừng đọc/gửi/nhận qua các API nhạy cảm ngay khi MCAS không còn giữ `ROLE_SMS`.
 - Không làm mất dữ liệu khi đổi sang ứng dụng SMS mặc định khác, vì dữ liệu chính nằm trong Provider hệ thống.
 
 ## 2. Kết quả rà soát dự án hiện tại
@@ -92,25 +108,26 @@ Chỉ coi là hoàn thành khi CallHS:
   receiver callback sent/delivery, notification nhắn tin hoặc service trả lời khi từ chối cuộc gọi.
 - `CallListScreen` đang sở hữu cả top bar, QR flow, tìm kiếm, nội dung và FAB trong một file lớn. Phải tách
   “khung màn chính dùng chung” trước khi chèn tab Nhắn tin, nếu không logic hai tính năng sẽ móc chéo nhau.
-- `PermissionGate` hiện khóa toàn app cho tới khi có đủ `READ_CALL_LOG`, `READ_PHONE_STATE` và
-  `READ_CONTACTS`. Cách này không phù hợp với một ứng dụng SMS mặc định: người dùng vẫn phải nhắn tin được
-  khi không cấp Danh bạ hoặc Nhật ký cuộc gọi.
-- Nội dung quyền riêng tư/README hiện nói CallHS “chỉ đọc” và “không tạo tin nhắn”. Nội dung này sẽ sai ngay
+- `PermissionGate` toàn màn hình cần giữ lại phong cách onboarding gốc nhưng mở rộng thành một state machine
+  tuần tự, bổ sung bước SMS composite và chuyển bước chấp nhận Điều khoản xuống cuối luồng.
+- Nội dung quyền riêng tư/README hiện nói MCAS “chỉ đọc” và “không tạo tin nhắn”. Nội dung này sẽ sai ngay
   khi tính năng mới hoạt động và phải được cập nhật cùng lúc với mã.
 - Backup tự động hiện chưa loại trừ bản nháp và ledger gửi SMS. Nội dung nhạy cảm mới phải được loại khỏi
   cloud backup/device transfer mặc định, trừ khi sau này có một lựa chọn backup rõ ràng do người dùng bật.
 
 ### 2.3. Các điểm cần hiệu chỉnh so với tài liệu đầu vào
 
-Tài liệu đầu vào định hướng đúng, nhưng khi áp dụng vào CallHS cần bổ sung các điểm sau:
+Tài liệu đầu vào định hướng đúng, nhưng khi áp dụng vào MCAS cần bổ sung các điểm sau:
 
-1. `SmsManager.createForSubscriptionId()` chỉ có từ API 31, trong khi CallHS hỗ trợ API 29. API 29–30 phải
+1. `SmsManager.createForSubscriptionId()` chỉ có từ API 31, trong khi MCAS hỗ trợ API 29. API 29–30 phải
    đi qua lớp tương thích dùng `SmsManager.getSmsManagerForSubscriptionId()`; tầng UI/domain không được tự
    phân nhánh theo phiên bản Android.
-2. Phải xin `ROLE_SMS` **trước** khi xin các runtime permission thuộc nhóm SMS. Không được thêm các quyền SMS
-   vào `PermissionGate` hiện tại rồi hỏi ngay lúc khởi động.
-3. Khi CallHS là ứng dụng SMS mặc định, hệ thống không tự ghi tin gửi bởi `SmsManager` vào Provider;
-   CallHS phải tạo/cập nhật bản ghi Outbox/Sent/Failed.
+2. Bước SMS được tích hợp vào `PermissionGate`, nhưng phải là một bước composite: xin `ROLE_SMS` **trước**,
+   kiểm tra role thật khi quay lại, rồi mới xin ba quyền SMS text lõi còn thiếu. `RECEIVE_MMS` và
+   `RECEIVE_WAP_PUSH` là capability bổ sung: thiếu chúng không được khóa toàn ứng dụng. Thiết bị không có
+   `FEATURE_TELEPHONY_MESSAGING` bỏ qua toàn bộ bước composite này.
+3. Khi MCAS là ứng dụng SMS mặc định, hệ thống không tự ghi tin gửi bởi `SmsManager` vào Provider;
+   MCAS phải tạo/cập nhật bản ghi Outbox/Sent/Failed.
 4. Không nên tự viết bộ đếm ký tự dựa trên giả định “ASCII = GSM-7”. Một số ký tự GSM extension tốn hai
    septet. Preview số phần và transport phải dùng `SmsMessage.calculateLength()`/`SmsManager.divideMessage()`.
 5. Khai báo `WAP_PUSH_DELIVER` chỉ để đủ role nhưng bỏ trống receiver có thể làm người dùng bỏ lỡ MMS.
@@ -153,19 +170,20 @@ Tạo `HomeScreen` làm chủ top bar, pager và các action dùng chung. `CallL
 
 ### 3.2. Các trạng thái của tab Nhắn tin
 
-Theo đúng thứ tự:
+Sau khi onboarding hoàn tất, tab Nhắn tin có các trạng thái sau:
 
 1. Thiết bị không có `FEATURE_TELEPHONY_MESSAGING`: giải thích thiết bị không hỗ trợ SMS; không hiện CTA role.
-2. CallHS chưa giữ role: màn giới thiệu ngắn, quyền riêng tư, điều gì thay đổi và nút **Đặt làm ứng dụng SMS**.
-3. Đã giữ role nhưng thiếu permission: kiểm tra/xin tuần tự nhóm SMS cần thiết; chỉ xin
-   `POST_NOTIFICATIONS` khi chuẩn bị bật thông báo. Các permission MMS/WAP phải được khai báo để đủ role,
-   nhưng chỉ được dùng sau khi receiver có mức xử lý an toàn tương ứng.
+2. Role bị thu hồi sau onboarding: dừng truy cập Provider, xóa dữ liệu nhạy cảm khỏi state và hiện CTA giải
+   thích để người dùng đặt lại MCAS làm ứng dụng SMS mặc định.
+3. Đã giữ role nhưng thiếu một quyền SMS text lõi (`READ_SMS`, `SEND_SMS`, `RECEIVE_SMS`): hiện trạng thái phục
+   hồi và chỉ xin lại quyền còn thiếu. Thiếu MMS/WAP chỉ làm giảm capability MMS, không khóa danh sách SMS.
 4. Đủ điều kiện nhưng chưa có tin: empty state có nút **Tin nhắn mới**.
-5. Đang tải/lỗi Provider/role vừa bị thu hồi: state riêng, không hiển thị danh sách cũ như thể vẫn được phép.
+5. Đang tải/lỗi Provider: state riêng, không hiển thị danh sách cũ như thể vẫn được phép.
 6. Sẵn sàng: danh sách hội thoại tự cập nhật qua `ContentObserver`.
 
-Không tự bật hộp thoại role ngay khi mở app. Chỉ hiển thị sau khi người dùng vào tab Nhắn tin và bấm CTA có
-giải thích. Khi quay lại từ màn hệ thống, kiểm tra `isRoleHeld()` thay vì tin vào result code.
+`ROLE_SMS` và quyền SMS text lõi lần đầu được xử lý trong `PermissionGate` toàn màn hình, không dùng một permission
+UI rời rạc bên trong tab Nhắn tin. `POST_NOTIFICATIONS` vẫn được xin theo ngữ cảnh khi chuẩn bị bật thông báo,
+không chen vào chuỗi quyền bắt buộc của onboarding.
 
 ### 3.3. Danh sách hội thoại
 
@@ -213,7 +231,7 @@ Composer gồm ô nhập bo tròn, nút chọn SIM và nút gửi:
 - Chuyển tab phải clear focus và đóng IME của search hiện tại, nhưng không xóa query/bản nháp.
 - Test portrait, landscape, bàn phím nổi, bàn phím vật lý, emoji, paste nội dung dài và thay đổi font scale nội bộ.
 
-## 4. Kiến trúc đề xuất phù hợp với CallHS
+## 4. Kiến trúc đề xuất phù hợp với MCAS
 
 ```mermaid
 flowchart TD
@@ -238,7 +256,7 @@ flowchart TD
 ### 4.1. Cấu trúc package/file dự kiến
 
 ```text
-com.antimobile.callhs/
+com.antimobile.mcas/
 ├─ data/messaging/
 │  ├─ model/                 ConversationSummary, SmsItem, status, draft
 │  ├─ role/                  SmsRole + capability/permission state
@@ -286,8 +304,8 @@ không gọi thẳng composable hoặc giữ ViewModel; chúng đi qua processor
 
 Không đưa SMS vào backup JSON hiện có ở giai đoạn đầu. Provider thuộc hệ thống; backup riêng rất dễ tạo bản sao,
 lộ nội dung hoặc khôi phục sai thread/subscription. Sidecar nên dùng file Room riêng như
-`callhs-messaging-private.db` để `backup_rules.xml`/`data_extraction_rules.xml` có thể loại cả DB, WAL và SHM mà
-không làm mất auto-backup của nhóm/rule CallHS đang nằm trong `callhs.db`.
+`mcas-messaging-private.db` để `backup_rules.xml`/`data_extraction_rules.xml` có thể loại cả DB, WAL và SHM mà
+không làm mất auto-backup của nhóm/rule MCAS đang nằm trong `mcas.db`.
 
 ### 4.3. Theo dõi dữ liệu và hiệu năng
 
@@ -316,22 +334,35 @@ Các permission/component MMS phải có trong manifest để đủ điều ki�
 placeholder” lên nhánh phát hành khi component chưa thực hiện đúng chức năng. Role có thể được hệ thống cấp chỉ
 vì manifest đủ hình thức, nhưng dữ liệu người dùng sẽ gặp rủi ro nếu receiver là no-op.
 
-### 5.2. Trình tự onboarding nhắn tin
+### 5.2. Trình tự onboarding toàn màn hình
 
-1. Người dùng chủ động mở tab Nhắn tin.
-2. CallHS giải thích vai trò và dữ liệu sẽ đọc/ghi.
-3. Gọi `RoleManager.createRequestRoleIntent(ROLE_SMS)`.
-4. Khi quay lại, kiểm tra role thật.
-5. Sau khi role đã giữ, kiểm tra các permission role đã cấp và chỉ xin runtime permission SMS còn thiếu.
-6. Xin notification sau một màn giải thích riêng hoặc ngay trước khi bật thông báo lần đầu.
-7. Danh bạ là tùy chọn; thiếu quyền không được chặn gửi/nhận.
+Giữ trải nghiệm onboarding gốc: mỗi bước là một màn hình thống nhất theo theme MCAS, có tiêu đề, giải thích
+ngắn, minh họa/icon, chỉ báo tiến trình và CTA rõ ràng. Chuyển bước dùng animation nhẹ, không xếp nhiều card
+permission rời rạc hoặc bật nhiều hộp thoại hệ thống cùng lúc.
 
-`PermissionGate` toàn app cần được tách thành:
+`PermissionGate` chạy tuần tự theo đúng thứ tự:
 
-- `ConsentGate`: chỉ điều khoản/chính sách chung.
-- Permission state riêng của tab Cuộc gọi.
-- `MessagingCapabilityGate`: role + permission SMS theo đúng thứ tự.
-- Permission Danh bạ/Thông tin SIM theo ngữ cảnh, có fallback hợp lý.
+1. Xin `READ_CALL_LOG`.
+2. Xin `READ_PHONE_STATE`.
+3. Xin `READ_CONTACTS`.
+4. Nếu thiết bị có `FEATURE_TELEPHONY_MESSAGING`, chạy bước SMS composite:
+   - giải thích MCAS sẽ trở thành ứng dụng SMS mặc định và sẽ đọc, ghi, gửi, nhận SMS/MMS;
+   - gọi `RoleManager.createRequestRoleIntent(ROLE_SMS)`;
+   - khi quay lại, kiểm tra `isRoleHeld()` thật thay vì chỉ dựa vào result code;
+   - chỉ sau khi giữ role, kiểm tra và xin ba quyền SMS text lõi còn thiếu: `READ_SMS`, `SEND_SMS`, `RECEIVE_SMS`;
+   - kiểm tra riêng `RECEIVE_MMS` và `RECEIVE_WAP_PUSH`; nếu ROM không cấp thì chỉ vô hiệu hóa/cảnh báo MMS,
+     tuyệt đối không giữ người dùng ở bước SMS vô hạn.
+5. Hiển thị Điều khoản/Chính sách quyền riêng tư và lưu chấp thuận bằng `ConsentStore`. Đây luôn là bước cuối
+   đối với người dùng chưa chấp thuận; người dùng đã chấp thuận trước đó không bị hỏi lại.
+
+Nếu thiết bị không hỗ trợ SMS, chuyển thẳng từ `READ_CONTACTS` sang Điều khoản. `POST_NOTIFICATIONS` không nằm
+trong chuỗi trên; chỉ xin theo ngữ cảnh khi người dùng chuẩn bị bật thông báo hoặc tính năng thực sự cần thông báo.
+Các trạng thái từ chối phải giữ nguyên màn hiện tại, giải thích ngắn và cho phép thử lại/mở Cài đặt mà không tạo
+vòng lặp dialog hệ thống.
+
+APK debug còn quyền ghi Danh bạ/Nhật ký cuộc gọi chỉ dành cho instrumented test nên có thể bị MIUI cảnh báo mạnh.
+Bản đưa cho người dùng thử phải là APK release đã ký; cảnh báo còn lại khi sideload SMS/Call Log là chính sách
+hard-restricted của Android/OEM, không được né bằng cách xóa các quyền cốt lõi khỏi manifest.
 
 ### 5.3. Khi role bị thu hồi
 
@@ -344,15 +375,15 @@ state cũ. Khi `ON_START` phát hiện mất role:
 - Hủy notification/action có thể gửi tin; mở state giải thích cách đặt lại role.
 - Không xóa dữ liệu Telephony Provider hay bản nháp của người dùng.
 
-### 5.4. Lưu ý Google Play riêng của CallHS
+### 5.4. Lưu ý Google Play riêng của MCAS
 
 `ROLE_SMS` chỉ đáp ứng điều kiện cho nhóm permission SMS; nó **không** tự hợp thức hóa `READ_CALL_LOG`.
-CallHS hiện yêu cầu `READ_CALL_LOG` toàn cục nhưng không phải default Phone/Assistant. Trước khi phát hành Play,
+MCAS hiện yêu cầu `READ_CALL_LOG` toàn cục nhưng không phải default Phone/Assistant. Trước khi phát hành Play,
 cần một audit/chấp thuận use case riêng cho Call Log hoặc thay đổi quyền/vai trò tương ứng. Đây là release blocker
 độc lập, không nên cho rằng thêm SMS mặc định sẽ giải quyết chính sách Call Log.
 
 README, onboarding, Điều khoản, Chính sách quyền riêng tư và mô tả Store phải đổi từ “chỉ đọc/không tạo tin nhắn”
-sang mô tả chính xác: CallHS đọc, ghi, gửi và nhận SMS cục bộ khi người dùng chọn làm ứng dụng mặc định.
+sang mô tả chính xác: MCAS đọc, ghi, gửi và nhận SMS cục bộ khi người dùng chọn làm ứng dụng mặc định.
 
 ## 6. Luồng gửi SMS text
 
@@ -428,11 +459,12 @@ mark read theo lifecycle/visibility. Nếu chỉ đang ở tab Nhắn tin nhưng
 
 ### `ACTION_SENDTO`
 
-Parser nhận các scheme `sms/smsto/mms/mmsto`, recipient và body từ URI/extra. Trong giai đoạn text-only:
+Parser nhận các scheme `sms/smsto/mms/mmsto`, recipient, body và subject từ URI/extra. Trạng thái Phase 2:
 
 - Một recipient: mở composer có sẵn người nhận/nội dung.
-- Nhiều recipient, subject hoặc attachment: không gửi âm thầm; hiển thị thông báo rõ tính năng MMS/group chưa
-  được hỗ trợ và giữ draft nếu có thể.
+- Một recipient + subject: mở composer MMS và vẫn yêu cầu xác nhận phí/kênh trước gửi.
+- Nhiều recipient hoặc stream/attachment ngoài ứng dụng: không gửi âm thầm; hiển thị thông báo rõ Group MMS
+  hay nhập attachment ngoài chưa được hỗ trợ và giữ body nếu có thể.
 - Intent mới khi app đang chạy phải đi qua một luồng deep-link duy nhất, tránh tạo hai `MainActivity`/hai nav stack.
 
 ### `RESPOND_VIA_MESSAGE`
@@ -440,15 +472,15 @@ Parser nhận các scheme `sms/smsto/mms/mmsto`, recipient và body từ URI/ext
 Service parse URI người nhận và nội dung, chọn SIM theo policy. Vì service không được mở UI để hỏi SIM, trên máy
 đa SIM chỉ gửi khi đã có SIM hội thoại/default hợp lệ; nếu mơ hồ thì báo thất bại an toàn, không tự chọn slot 0.
 
-## 9. Sàn an toàn MMS trong giai đoạn text-only
+## 9. Sàn an toàn MMS (đã hiện thực trong Phase 2)
 
 Đây là ranh giới quan trọng giữa “alpha SMS text” và “ứng dụng SMS mặc định có thể phát hành rộng”:
 
 - Hệ thống yêu cầu khai báo `WAP_PUSH_DELIVER` để đủ `ROLE_SMS`.
-- Sau khi CallHS là mặc định, CallHS là nơi duy nhất nhận broadcast MMS đến.
+- Sau khi MCAS là mặc định, MCAS là nơi duy nhất nhận broadcast MMS đến.
 - Receiver no-op có thể khiến người dùng không biết họ vừa nhận MMS và không thể xem nội dung ở app khác.
 
-Vì vậy kế hoạch chia hai gate:
+Hai gate ban đầu và trạng thái hiện tại:
 
 1. **Phase 1 alpha nội bộ:** SMS text hoạt động đầy đủ; `MmsDeliverReceiver` ghi log đã che dữ liệu và hiện cảnh báo
    “MMS chưa được hỗ trợ”. Chỉ dùng cho thiết bị thử nghiệm, không quảng bá là bản thay thế SMS hoàn chỉnh.
@@ -456,7 +488,11 @@ Vì vậy kế hoạch chia hai gate:
    indication, tải raw PDU đúng subId theo lựa chọn data/roaming, giữ lại an toàn, parse metadata/text cơ bản và
    hiển thị placeholder có thể retry. UI gửi ảnh/MMS vẫn để Phase 2.
 
-Không có cách an toàn để “chuyển tiếp” `WAP_PUSH_DELIVER` sang ứng dụng SMS cũ sau khi CallHS đang là mặc định.
+Gate kỹ thuật này đã được hiện thực: receiver không còn no-op, raw PDU chỉ tồn tại trong cache riêng tới callback,
+text/image part được ghi Provider và placeholder có tải/retry. Gate phát hành thực tế vẫn chưa đóng cho tới khi
+matrix SIM/OEM/nhà mạng ở mục Phase 2 được chạy xanh.
+
+Không có cách an toàn để “chuyển tiếp” `WAP_PUSH_DELIVER` sang ứng dụng SMS cũ sau khi MCAS đang là mặc định.
 
 ## 10. Kế hoạch triển khai giai đoạn đầu
 
@@ -465,14 +501,16 @@ Mỗi mốc dưới đây phải build/test xanh trước khi sang mốc sau; kh
 ### M0 — Guardrail, quyền và hợp đồng nền tảng
 
 - Viết `SmsRole`/`MessagingCapability` và test role available/held state.
-- Tách `ConsentGate` khỏi ba permission bắt buộc; giữ `ConsentStore` để không hỏi lại người dùng cũ và giữ hành
-  vi tab Cuộc gọi bằng gate cục bộ.
-- Thiết kế onboarding role → SMS permission đúng thứ tự.
+- Khôi phục `PermissionGate` onboarding toàn màn hình và mở rộng state machine theo thứ tự `READ_CALL_LOG` →
+  `READ_PHONE_STATE` → `READ_CONTACTS` → SMS composite → Điều khoản.
+- Trong SMS composite, kiểm tra feature, xin role trước rồi mới xin quyền SMS text lõi còn thiếu; MMS/WAP là
+  best-effort không khóa onboarding. Bỏ qua bước trên thiết bị không hỗ trợ SMS và giữ notification theo ngữ cảnh.
+- Giữ `ConsentStore` để không hỏi lại người dùng cũ; với người dùng mới, Điều khoản luôn là bước cuối.
 - Chốt manifest components và intent parser; chưa phát hành component no-op.
 - Cập nhật nội dung pháp lý, README, backup exclusions và checklist Play Console.
 
-**Điều kiện đạt:** người dùng từ chối Danh bạ/Call Log vẫn mở được tab Nhắn tin; không có SMS permission prompt
-trước role; mất role là UI ngừng truy cập dữ liệu ngay.
+**Điều kiện đạt:** onboarding đúng thứ tự, không có SMS permission prompt trước role, thiết bị không hỗ trợ SMS
+không bị kẹt ở bước SMS, Điều khoản chỉ xuất hiện cuối luồng và mất role làm UI ngừng truy cập dữ liệu ngay.
 
 ### M1 — Refactor Home + tab chuyển động
 
@@ -503,7 +541,7 @@ nhật, thiếu Contacts chỉ mất tên/ảnh chứ không mất chức năng.
 - Xây segment calculator, `SmsManagerFactory`, `MessagingSimSelector` và `SmsTransport`.
 - Insert Outbox, gửi single/multipart, sent/delivery receivers và mapping lỗi có i18n.
 - Hoàn thiện SIM picker, segment counter, draft restore, retry thủ công và chống double send.
-- Tích hợp mẫu tin nhắn/QR hiện có để mở composer CallHS thay vì chuyển sang app khác khi CallHS đã giữ role.
+- Tích hợp mẫu tin nhắn/QR hiện có để mở composer MCAS thay vì chuyển sang app khác khi MCAS đã giữ role.
 
 **Điều kiện đạt:** single/dual-SIM, Unicode/GSM-7, SMS nhiều part, mất sóng, SIM bị tháo và process death đều
 cho trạng thái nhất quán; không tự đổi SIM và không gửi trùng do callback.
@@ -545,7 +583,12 @@ external compose và trả lời khi từ chối cuộc gọi không crash hoặ
 
 ### 11.2. Instrumented/UI test
 
-- CTA role và thứ tự permission trên API 29/33/36.
+- Onboarding toàn màn hình đúng thứ tự `READ_CALL_LOG` → `READ_PHONE_STATE` → `READ_CONTACTS` → SMS composite
+  → Điều khoản trên API 29/33/36; role luôn đứng trước permission SMS text.
+- Hồi quy OEM: đã giữ role + đủ ba quyền SMS text nhưng thiếu `RECEIVE_MMS`/`RECEIVE_WAP_PUSH` vẫn phải qua
+  onboarding, mở danh sách và gửi/nhận SMS bình thường.
+- Thiết bị không có `FEATURE_TELEPHONY_MESSAGING` bỏ qua bước SMS; `POST_NOTIFICATIONS` không xuất hiện trong
+  onboarding và chỉ được hỏi theo ngữ cảnh.
 - Tab animation, swipe/tap, giữ scroll/filter/search; TalkBack semantics.
 - Composer + IME ở gesture/3-button, landscape, nội dung dài, đổi tab và Back.
 - Provider read/write bằng dữ liệu thử; mở đúng thread từ notification và `ACTION_SENDTO`.
@@ -566,7 +609,8 @@ Tối thiểu:
 ## 12. Definition of Done cho giai đoạn SMS text ổn định
 
 - [ ] Tab Cuộc gọi/Nhắn tin đúng UI yêu cầu, animation mượt và không regression màn cuộc gọi.
-- [ ] Role/permission đúng thứ tự; tất cả state từ chối/thu hồi đều có đường thoát.
+- [ ] PermissionGate toàn màn hình đúng thứ tự, SMS composite role-trước-permission và Điều khoản ở bước cuối;
+  tất cả state từ chối/thu hồi đều có đường thoát, MMS/WAP thiếu không khóa SMS text.
 - [ ] Hội thoại và lịch sử SMS từ Provider hiển thị đúng, phân trang, tự cập nhật.
 - [ ] Gửi/nhận SMS single/multipart trên một SIM và hai SIM; SIM gửi/nhận hiển thị đúng.
 - [ ] Outbox/Sent/Failed/Delivered nhất quán sau process death và callback lặp/đảo thứ tự.
@@ -577,17 +621,18 @@ Tối thiểu:
 - [ ] Không log số/nội dung/PDU thô; dữ liệu SMS sidecar không bị auto backup ngoài ý muốn.
 - [ ] Privacy/README/Store description không còn tuyên bố “chỉ đọc, không tạo tin nhắn”.
 - [ ] Unit test, instrumented test, `assembleDebug` và lint/test hiện có đều xanh.
-- [ ] Có quyết định release rõ ràng về MMS safety; không phát hành rộng với receiver MMS no-op.
+- [x] Receiver MMS không còn no-op; release vẫn bị khóa cho tới khi matrix thiết bị/nhà mạng Phase 2 xanh.
 
 ## 13. Backlog tính năng chuyên biệt sau giai đoạn đầu
 
-### Phase 2 — MMS nền tảng và ảnh
+### Phase 2 — MMS nền tảng và ảnh (đã triển khai mã nguồn, chờ xác nhận thiết bị/nhà mạng)
 
-- Nhận WAP Push, auto/manual download theo data/roaming, retry và lỗi APN/MMSC.
-- PDU codec được kiểm thử nhiều OEM/nhà mạng; lưu/đọc text part và media part trong Provider.
-- Photo Picker, đọc orientation/MIME, nén theo giới hạn carrier, gửi ảnh + caption.
-- Hiển thị ảnh thumbnail/fullscreen, URI permission, cleanup file tạm và chống file độc hại.
-- Subject làm message chuyển sang MMS; không chuyển ngầm mà không báo chi phí/kênh.
+- [x] Nhận WAP Push, auto/manual download theo roaming, retry và lưu lỗi APN/MMSC/HTTP.
+- [ ] PDU codec đã có unit test và lưu/đọc Provider; còn kiểm thử tương thích nhiều OEM/nhà mạng thật.
+- [x] Photo Picker, orientation/MIME, giới hạn giải nén, nén theo carrier, gửi ảnh + caption.
+- [x] Thumbnail/fullscreen, URI permission, cleanup file tạm và MIME/file-name allowlist.
+- [x] Subject làm message chuyển sang MMS; luôn xác nhận phí/kênh trước gửi.
+- [ ] Matrix end-to-end hai SIM, dữ liệu tắt/roaming/APN lỗi/process death phải xanh trước public release.
 
 ### Phase 3 — Group MMS, vị trí và danh thiếp
 
@@ -615,7 +660,7 @@ có API hợp lệ; không trộn vào transport SMS hiện tại.
 
 | Rủi ro | Cách kiểm soát |
 |---|---|
-| Mất MMS khi CallHS là mặc định | Gate phát hành theo mục 9; không để WAP receiver no-op trong bản public |
+| Mất MMS khi MCAS là mặc định | Gate phát hành theo mục 9; không để WAP receiver no-op trong bản public |
 | Gửi nhầm SIM/phát sinh phí | Chỉ dùng active subId, không fallback slot, bắt chọn lại khi mơ hồ |
 | Gửi trùng do callback/retry | Persist attempt/part, idempotent receiver, không auto-retry, khóa double tap |
 | Hai nguồn dữ liệu lệch nhau | Provider là source of truth; Room chỉ sidecar có khóa provider/thread |

@@ -12,7 +12,7 @@ val keystoreProperties = Properties().apply {
 }
 
 android {
-    namespace = "com.antimobile.callhs"
+    namespace = "com.antimobile.mcas"
     compileSdk {
         version = release(36) {
             minorApiLevel = 1
@@ -20,7 +20,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.antimobile.callhs"
+        applicationId = "com.antimobile.mcas"
         minSdk = 29
         targetSdk = 36
         versionCode = 4

@@ -1,4 +1,4 @@
-# Kiến trúc chặn cuộc gọi CallHS
+# Kiến trúc chặn cuộc gọi MCAS
 
 Tài liệu này là hợp đồng hiện hành của mô-đun chặn cuộc gọi. Mọi thay đổi model, engine, UI,
 backup hoặc service phải giữ đúng thứ tự quyết định và các invariant bên dưới.
@@ -90,7 +90,7 @@ Hợp đồng chi tiết:
 1. Bảo vệ OFF hoặc pause: cho mọi cuộc gọi qua; dữ liệu vẫn được giữ.
 2. Danh sách cho phép: kết thúc ngay bằng `ALLOW`.
 3. Danh sách chặn: kết thúc bằng `BLOCK` và dùng phương thức xử lý hiện hành.
-4. CallHS xác định số nằm trong hay ngoài Danh bạ rồi áp dụng lựa chọn tương ứng:
+4. MCAS xác định số nằm trong hay ngoài Danh bạ rồi áp dụng lựa chọn tương ứng:
    - Trong Danh bạ: **Áp dụng theo quy tắc**, **Luôn cho qua**, hoặc **Chặn toàn bộ**.
    - Ngoài Danh bạ: **Cho qua nếu không khớp quy tắc**, **Chặn toàn bộ**, hoặc
      **Chặn đến khi gọi lặp**.
@@ -175,7 +175,7 @@ lookup `UNKNOWN`; `ALL_VISIBLE_NUMBERS` vẫn hoạt động độc lập.
 - `SPAM_RISK`: profile cục bộ `app_default`, chỉ hỗ trợ action `BLOCK`; không được tạo hoặc bật tự động khi
   cài đặt, nâng cấp hay restore. Matcher dùng các dấu hiệu: số Việt Nam hoàn chỉnh thuộc nhóm
   `022/023/024/028/059/099`; số di động Việt Nam 10 chữ số dùng đầu số chưa có trong danh mục nhà mạng
-  nội bộ của CallHS; hoặc Android
+  nội bộ của MCAS; hoặc Android
   11+ báo `VERIFICATION_STATUS_FAILED`. `NOT_VERIFIED`, `PASSED`, Android 10 và số sai định dạng không khớp
   riêng vì tín hiệu xác minh.
 
@@ -189,7 +189,7 @@ Lý do khớp được ghi theo codec bất biến, không phụ thuộc ngôn n
 | Dấu hiệu thực tế | `ruleType` | `ruleValue` trong history/backup |
 |---|---|---|
 | Khớp một họ đầu số trong profile | `spam_risk` | `v1\|prefix\|024` |
-| Đầu số di động Việt Nam chưa có trong danh mục CallHS | `spam_risk` | `v1\|unknown_mobile_prefix\|054` |
+| Đầu số di động Việt Nam chưa có trong danh mục MCAS | `spam_risk` | `v1\|unknown_mobile_prefix\|054` |
 | Android/nhà mạng báo xác minh số gọi thất bại | `spam_risk` | `v1\|verification_failed` |
 
 Rule đang hoạt động vẫn lưu `rawValue=matchValue=app_default`; chỉ sự kiện lịch sử lưu lý do cụ thể. Codec
@@ -409,7 +409,7 @@ Quy tắc:
 
 - Top bar: back, title, icon settings.
 - Ngay dưới title: `Segmented` hai tab Quy tắc/Lịch sử.
-- Tab Quy tắc có card **Tìm hiểu cách CallHS chặn cuộc gọi**, bốn card quản lý:
+- Tab Quy tắc có card **Tìm hiểu cách MCAS chặn cuộc gọi**, bốn card quản lý:
   **Danh sách cho phép**, **Danh sách chặn**, **Xử lý theo danh bạ**, **Quy tắc nâng cao**, và card hỗ trợ
   **Các vấn đề thường gặp** nằm cuối danh sách.
 - Card hướng dẫn luôn rõ và mở được ngay cả khi bảo vệ đang tắt; card này không hiển thị số lượng rule.
@@ -418,16 +418,16 @@ Quy tắc:
 
 ### Hướng dẫn quy trình
 
-Card **Tìm hiểu cách CallHS chặn cuộc gọi** có mô tả “Xem thứ tự CallHS kiểm tra và xử lý một cuộc
-gọi đến”, rồi mở `AppBottomSheet` **Cách CallHS xử lý cuộc gọi**. Sheet mở đầu bằng câu “CallHS kiểm
+Card **Tìm hiểu cách MCAS chặn cuộc gọi** có mô tả “Xem thứ tự MCAS kiểm tra và xử lý một cuộc
+gọi đến”, rồi mở `AppBottomSheet` **Cách MCAS xử lý cuộc gọi**. Sheet mở đầu bằng câu “MCAS kiểm
 tra lần lượt theo thứ tự dưới đây và dừng ngay khi đã có kết quả”, sau đó trình bày đúng sáu bước:
 
 1. **Kiểm tra bảo vệ cuộc gọi** — Nếu bảo vệ đang tắt hoặc tạm dừng, mọi cuộc gọi đều được cho qua.
 2. **Kiểm tra Danh sách cho phép** — Số có trong Danh sách cho phép được cho qua ngay.
 3. **Kiểm tra Danh sách chặn** — Nếu số có trong Danh sách chặn, cuộc gọi sẽ bị chặn.
-4. **Xử lý theo danh bạ** — CallHS áp dụng lựa chọn dành cho số trong hoặc ngoài Danh bạ. Chọn
+4. **Xử lý theo danh bạ** — MCAS áp dụng lựa chọn dành cho số trong hoặc ngoài Danh bạ. Chọn
    **Áp dụng theo quy tắc** để tiếp tục bước kế tiếp.
-5. **Kiểm tra Quy tắc nâng cao** — CallHS xét từ trên xuống. Quy tắc đầu tiên khớp sẽ được áp dụng.
+5. **Kiểm tra Quy tắc nâng cao** — MCAS xét từ trên xuống. Quy tắc đầu tiên khớp sẽ được áp dụng.
 6. **Áp dụng kết quả mặc định** — Nếu không có danh sách hay quy tắc nào khớp, cuộc gọi được cho qua.
    Chế độ gọi lặp chỉ áp dụng ở bước cuối cho số ngoài Danh bạ.
 
@@ -500,14 +500,14 @@ thứ tự đọc TalkBack phải theo đúng thứ tự sáu bước.
 
 - Tài liệu [`Call.Details.getCallerNumberVerificationStatus()`](https://developer.android.com/reference/android/telecom/Call.Details#getCallerNumberVerificationStatus())
   của Android định nghĩa `VERIFICATION_STATUS_FAILED` là tín hiệu số có thể bị giả mạo hoặc không mong muốn;
-  `NOT_VERIFIED` chỉ có nghĩa là không có thông tin và phải fail open trong CallHS.
+  `NOT_VERIFIED` chỉ có nghĩa là không có thông tin và phải fail open trong MCAS.
 - Bộ TT&TT mô tả các họ mã vùng cố định sau chuyển đổi, trong đó có
   [`022x`, `023x`, `024` và `028`](https://english.mic.gov.vn/dialling-codes-to-change-from-feb-2017-197133361.htm).
   Đây là đầu số hợp lệ, không phải nhãn lừa đảo.
 - `059` và `099` là đầu số di động hợp lệ của Gmobile; xem
   [thông báo chính thức của Gmobile](https://gmobile.vn/thong-bao-cap-nhat-cac-goi-cuoc-sau-khi-nang-cap-he-thong).
 - Kênh chính thức [`156/5656`](https://mic.gov.vn/bo-tttt-trien-khai-tong-dai-156-tiep-nhan-phan-anh-tin-nhan-rac-cuoc-goi-rac-cuoc-goi-co-dau-hieu-lua-dao-197155742.htm)
-  tiếp nhận phản ánh để nhà mạng xác minh. CallHS không tuyên bố profile cục bộ là bản sao của một danh sách
+  tiếp nhận phản ánh để nhà mạng xác minh. MCAS không tuyên bố profile cục bộ là bản sao của một danh sách
   số lừa đảo đã được xác nhận và hiện không tự gửi dữ liệu người dùng tới các tổng đài này.
 
 ### Settings riêng

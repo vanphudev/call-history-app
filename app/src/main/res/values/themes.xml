@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.CallHS" parent="android:Theme.Material.Light.NoActionBar">
+    <style name="Theme.MCAS" parent="android:Theme.Material.Light.NoActionBar">
         <!-- Nền cửa sổ TRẮNG: tránh nháy màu xám mặc định trước khi Compose vẽ. -->
         <item name="android:windowBackground">@android:color/white</item>
         <!-- Thanh hệ thống trong suốt (hành vi cơ sở cho API 29-34; API 35+ vốn đã ép trong suốt). -->
