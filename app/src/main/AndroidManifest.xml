@@ -7,6 +7,10 @@
         android:required="false" />
 
     <uses-feature
+        android:name="android.hardware.telephony.messaging"
+        android:required="false" />
+
+    <uses-feature
         android:name="android.hardware.camera.any"
         android:required="false" />
 
@@ -30,6 +34,13 @@
     <!-- Notification riêng sau khi CallScreeningService đã chặn cuộc gọi (Android 13+ xin runtime). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Nhóm quyền chỉ được dùng sau khi người dùng chủ động chọn MCAS giữ ROLE_SMS. -->
+    <uses-permission android:name="android.permission.READ_SMS" />
+    <uses-permission android:name="android.permission.SEND_SMS" />
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <uses-permission android:name="android.permission.RECEIVE_MMS" />
+    <uses-permission android:name="android.permission.RECEIVE_WAP_PUSH" />
+
     <!-- Tuỳ chọn popup AppDialog-style cho cảnh báo cuộc gọi đi; người dùng phải tự cấp special access. -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
@@ -50,22 +61,89 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.CallHS"
+        android:theme="@style/Theme.MCAS"
         tools:targetApi="31">
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:configChanges="locale|layoutDirection|uiMode"
+            android:launchMode="singleTop"
             android:label="@string/app_name"
-            android:theme="@style/Theme.CallHS">
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.MCAS">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SENDTO" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="sms" />
+                <data android:scheme="smsto" />
+                <data android:scheme="mms" />
+                <data android:scheme="mmsto" />
+            </intent-filter>
         </activity>
 
-        <!-- Android chỉ bind service này sau khi người dùng chọn CallHS cho ROLE_CALL_SCREENING. -->
+        <receiver
+            android:name=".receiver.messaging.SmsDeliverReceiver"
+            android:exported="true"
+            android:permission="android.permission.BROADCAST_SMS">
+            <intent-filter>
+                <action android:name="android.provider.Telephony.SMS_DELIVER" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".receiver.messaging.MmsDeliverReceiver"
+            android:exported="true"
+            android:permission="android.permission.BROADCAST_WAP_PUSH">
+            <intent-filter>
+                <action android:name="android.provider.Telephony.WAP_PUSH_DELIVER" />
+                <data android:mimeType="application/vnd.wap.mms-message" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".receiver.messaging.MmsDownloadReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".receiver.messaging.MmsSentReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".receiver.messaging.SmsSentReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".receiver.messaging.SmsDeliveryReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".receiver.messaging.NotificationReplyReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".receiver.messaging.MarkConversationReadReceiver"
+            android:exported="false" />
+
+        <service
+            android:name=".service.messaging.RespondViaMessageService"
+            android:exported="true"
+            android:permission="android.permission.SEND_RESPOND_VIA_MESSAGE">
+            <intent-filter>
+                <action android:name="android.intent.action.RESPOND_VIA_MESSAGE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="sms" />
+                <data android:scheme="smsto" />
+                <data android:scheme="mms" />
+                <data android:scheme="mmsto" />
+            </intent-filter>
+        </service>
+
+        <!-- Android chỉ bind service này sau khi người dùng chọn MCAS cho ROLE_CALL_SCREENING. -->
         <service
             android:name=".data.blocking.CallBlockScreeningService"
             android:exported="true"
@@ -75,7 +153,7 @@
             </intent-filter>
         </service>
 
-        <!-- Callback chuyên biệt trước cuộc gọi đi; CallHS luôn gọi placeCallUnmodified(). -->
+        <!-- Callback chuyên biệt trước cuộc gọi đi; MCAS luôn gọi placeCallUnmodified(). -->
         <service
             android:name=".data.outgoing.OutgoingCallRedirectionService"
             android:exported="true"

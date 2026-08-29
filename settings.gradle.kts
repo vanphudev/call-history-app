@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "callHS"
+rootProject.name = "MCAS"
 include(":app")
